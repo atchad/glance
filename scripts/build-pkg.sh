@@ -53,12 +53,8 @@ pkgbuild \
 
 pkgutil --check-signature "$pkg_path"
 
-if [[ -n "${GLANCE_NOTARY_PROFILE:-}" ]]; then
-  xcrun notarytool submit "$pkg_path" \
-    --keychain-profile "$GLANCE_NOTARY_PROFILE" \
-    --wait
-  xcrun stapler staple "$pkg_path"
-  xcrun stapler validate "$pkg_path"
+if [[ -n "${GLANCE_NOTARY_PROFILE:-}${GLANCE_NOTARY_KEY:-}${GLANCE_NOTARY_KEY_ID:-}${GLANCE_NOTARY_ISSUER_ID:-}" ]]; then
+  "$repo_root/scripts/notarize.sh" "$pkg_path"
 fi
 
 echo "$pkg_path"

@@ -44,6 +44,8 @@ GLANCE_NOTARY_PROFILE=Glance ./scripts/build-pkg.sh
 
 Release builds automatically use the first Developer ID Application certificate in the current Keychain. Set `GLANCE_SIGNING_IDENTITY` to select a specific identity. To notarize the DMG as part of the build, set `GLANCE_NOTARY_PROFILE` to a profile previously created with `xcrun notarytool store-credentials`.
 
+CI runs for every pull request and push to `main`. Version tags build universal Apple silicon/Intel installers, sign them in an ephemeral Keychain, notarize them with an App Store Connect API key, verify them with Gatekeeper, and publish them as GitHub Release assets. See [docs/RELEASING.md](docs/RELEASING.md) for the one-time secret setup and release procedure.
+
 Glance uses saved GitHub search queries for its sections. The built-in sections show pull requests requesting your review and pull requests you opened. Edit or add validated sections in Settings.
 
 Command-click a pull request to remove that revision from Glance. If the pull request receives a new commit, it automatically returns. This shortcut is enabled by default and can be turned off in Settings.

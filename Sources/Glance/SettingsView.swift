@@ -11,7 +11,7 @@ struct GlanceSettingsView: View {
       SectionSettingsView(store: store)
         .tabItem { Label("Sections", systemImage: "list.bullet") }
     }
-    .frame(width: 560, height: 465)
+    .frame(minWidth: 500, idealWidth: 520, minHeight: 420, idealHeight: 465)
   }
 }
 
@@ -125,7 +125,9 @@ private struct GeneralSettingsView: View {
       }
     }
     .formStyle(.grouped)
-    .padding(.horizontal, 8)
+    .toggleStyle(GlanceSwitchToggleStyle())
+    .contentMargins(.horizontal, 4, for: .scrollContent)
+    .contentMargins(.vertical, 8, for: .scrollContent)
     .sheet(isPresented: $showingRepositoryPicker) {
       RepositoryNotificationPicker(store: store)
     }
@@ -136,6 +138,40 @@ private struct GeneralSettingsView: View {
     if excluded == 0 { return "Every repository is visible." }
     return
       "\(excluded) \(excluded == 1 ? "repository is" : "repositories are") excluded from Glance."
+  }
+}
+
+private struct GlanceSwitchToggleStyle: ToggleStyle {
+  @Environment(\.isEnabled) private var isEnabled
+
+  func makeBody(configuration: Configuration) -> some View {
+    Button {
+      configuration.isOn.toggle()
+    } label: {
+      HStack(spacing: 12) {
+        configuration.label
+        Spacer(minLength: 12)
+        Capsule(style: .continuous)
+          .fill(configuration.isOn ? Color.accentColor : Color.secondary.opacity(0.28))
+          .frame(width: 36, height: 20)
+          .overlay(alignment: configuration.isOn ? .trailing : .leading) {
+            Circle()
+              .fill(.white)
+              .frame(width: 16, height: 16)
+              .shadow(color: .black.opacity(0.18), radius: 1, y: 0.5)
+              .padding(2)
+          }
+          .overlay {
+            Capsule(style: .continuous)
+              .stroke(.primary.opacity(configuration.isOn ? 0.08 : 0.16), lineWidth: 0.5)
+          }
+      }
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .opacity(isEnabled ? 1 : 0.5)
+    .animation(.easeOut(duration: 0.14), value: configuration.isOn)
+    .accessibilityValue(configuration.isOn ? "On" : "Off")
   }
 }
 

@@ -20,12 +20,14 @@ final class SettingsWindowController: NSObject, ObservableObject, NSWindowDelega
 
   private func makeWindow() -> NSWindow {
     let window = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: 560, height: 465),
-      styleMask: [.titled, .closable, .miniaturizable],
+      contentRect: NSRect(x: 0, y: 0, width: 520, height: 465),
+      styleMask: [.titled, .closable, .miniaturizable, .resizable],
       backing: .buffered,
       defer: false
     )
     window.title = "Glance Settings"
+    window.minSize = NSSize(width: 500, height: 420)
+    window.setFrameAutosaveName("GlanceSettingsWindow")
     window.isReleasedWhenClosed = false
     window.contentViewController = NSHostingController(
       rootView: GlanceSettingsView(store: store, panel: panelController)

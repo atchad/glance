@@ -9,8 +9,13 @@ if [[ ! -f "$repo_root/support/Glance.icns" ]]; then
     "$repo_root/scripts/build-assets.sh" >/dev/null
 fi
 
-swift build -c "$configuration"
-binary_path="$(swift build -c "$configuration" --show-bin-path)/Glance"
+build_arguments=(-c "$configuration")
+if [[ "$configuration" == "release" && "${GLANCE_UNIVERSAL_BUILD:-1}" != "0" ]]; then
+    build_arguments+=(--arch arm64 --arch x86_64)
+fi
+
+swift build "${build_arguments[@]}"
+binary_path="$(swift build "${build_arguments[@]}" --show-bin-path)/Glance"
 binary_directory="${binary_path:h}"
 app_path="$repo_root/dist/Glance.app"
 contents_path="$app_path/Contents"

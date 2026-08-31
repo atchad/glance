@@ -81,10 +81,8 @@ else
   codesign --force --sign - "$dmg_path"
 fi
 
-if [[ -n "${GLANCE_NOTARY_PROFILE:-}" ]]; then
-  xcrun notarytool submit "$dmg_path" --keychain-profile "$GLANCE_NOTARY_PROFILE" --wait
-  xcrun stapler staple "$dmg_path"
-  xcrun stapler validate "$dmg_path"
+if [[ -n "${GLANCE_NOTARY_PROFILE:-}${GLANCE_NOTARY_KEY:-}${GLANCE_NOTARY_KEY_ID:-}${GLANCE_NOTARY_ISSUER_ID:-}" ]]; then
+  "$repo_root/scripts/notarize.sh" "$dmg_path"
 fi
 
 echo "$dmg_path"

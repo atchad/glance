@@ -28,6 +28,7 @@ struct DashboardView: View {
             }
           }
         }
+        .background(OverlayScrollViewConfigurator())
       }
       Divider()
       footer
@@ -160,6 +161,47 @@ struct DashboardView: View {
     }
     .font(.caption).foregroundStyle(.secondary)
     .padding(.horizontal, 13).padding(.vertical, 8)
+  }
+}
+
+private struct OverlayScrollViewConfigurator: NSViewRepresentable {
+  func makeCoordinator() -> Coordinator { Coordinator() }
+
+  func makeNSView(context: Context) -> NSView {
+    let view = NSView()
+    context.coordinator.attach(to: view)
+    return view
+  }
+
+  func updateNSView(_ nsView: NSView, context: Context) {
+    context.coordinator.attach(to: nsView)
+  }
+
+  final class Coordinator {
+    private weak var scrollView: NSScrollView?
+    private var resignObserver: NSObjectProtocol?
+
+    deinit {
+      if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+    }
+
+    func attach(to view: NSView) {
+      DispatchQueue.main.async { [weak self, weak view] in
+        guard let self, let scrollView = view?.enclosingScrollView else { return }
+        self.scrollView = scrollView
+        scrollView.scrollerStyle = .overlay
+        scrollView.autohidesScrollers = true
+        if self.resignObserver == nil {
+          self.resignObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: nil,
+            queue: .main
+          ) { [weak self] _ in
+            self?.scrollView?.verticalScroller?.animator().alphaValue = 0
+          }
+        }
+      }
+    }
   }
 }
 

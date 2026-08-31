@@ -1,0 +1,134 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-26
+    timeout-minutes: 45
+    environment: release
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate release tag and source version
+        shell: zsh {0}
+        run: |
+          set -euo pipefail
+          if [[ ! "$GITHUB_REF_NAME" =~ '^v[0-9]+\.[0-9]+\.[0-9]+$' ]]; then
+            print -u2 "Release tags must use vMAJOR.MINOR.PATCH."
+            exit 1
+          fi
+          source_version="$(plutil -extract CFBundleShortVersionString raw support/Info.plist)"
+          if [[ "$GITHUB_REF_NAME" != "v$source_version" ]]; then
+            print -u2 "Tag $GITHUB_REF_NAME does not match app version $source_version."
+            exit 1
+          fi
+          zsh -n scripts/*.sh
+
+      - name: Run tests
+        run: swift test
+
+      - name: Import Developer ID certificates
+        shell: zsh {0}
+        env:
+          APPLICATION_CERTIFICATE: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_BASE64 }}
+          APPLICATION_CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_P12_PASSWORD }}
+          INSTALLER_CERTIFICATE: ${{ secrets.DEVELOPER_ID_INSTALLER_P12_BASE64 }}
+          INSTALLER_CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_INSTALLER_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${APPLICATION_CERTIFICATE:?Missing application certificate secret}"
+          : "${APPLICATION_CERTIFICATE_PASSWORD:?Missing application certificate password secret}"
+          : "${INSTALLER_CERTIFICATE:?Missing installer certificate secret}"
+          : "${INSTALLER_CERTIFICATE_PASSWORD:?Missing installer certificate password secret}"
+
+          keychain_path="$RUNNER_TEMP/glance-signing.keychain-db"
+          keychain_password="$(openssl rand -hex 32)"
+          application_p12="$RUNNER_TEMP/developer-id-application.p12"
+          installer_p12="$RUNNER_TEMP/developer-id-installer.p12"
+
+          umask 077
+          printf '%s' "$APPLICATION_CERTIFICATE" | base64 --decode > "$application_p12"
+          printf '%s' "$INSTALLER_CERTIFICATE" | base64 --decode > "$installer_p12"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$application_p12" -k "$keychain_path" \
+            -P "$APPLICATION_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security import "$installer_p12" -k "$keychain_path" \
+            -P "$INSTALLER_CERTIFICATE_PASSWORD" -T /usr/bin/pkgbuild
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$keychain_password" "$keychain_path"
+          security list-keychains -d user -s "$keychain_path"
+
+          print "GLANCE_CI_KEYCHAIN=$keychain_path" >> "$GITHUB_ENV"
+          print "GLANCE_SIGNING_IDENTITY=Developer ID Application: Anthony Chadwick (3KJ2GE5MDA)" >> "$GITHUB_ENV"
+          print "GLANCE_INSTALLER_IDENTITY=Developer ID Installer: Anthony Chadwick (3KJ2GE5MDA)" >> "$GITHUB_ENV"
+
+      - name: Prepare notarization key
+        shell: zsh {0}
+        env:
+          NOTARY_KEY: ${{ secrets.APP_STORE_CONNECT_KEY_BASE64 }}
+          NOTARY_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          : "${NOTARY_KEY:?Missing App Store Connect key secret}"
+          : "${NOTARY_KEY_ID:?Missing App Store Connect key ID secret}"
+          : "${NOTARY_ISSUER_ID:?Missing App Store Connect issuer ID secret}"
+
+          notary_key_path="$RUNNER_TEMP/AuthKey_${NOTARY_KEY_ID}.p8"
+          umask 077
+          printf '%s' "$NOTARY_KEY" | base64 --decode > "$notary_key_path"
+          print "GLANCE_NOTARY_KEY=$notary_key_path" >> "$GITHUB_ENV"
+          print "GLANCE_NOTARY_KEY_ID=$NOTARY_KEY_ID" >> "$GITHUB_ENV"
+          print "GLANCE_NOTARY_ISSUER_ID=$NOTARY_ISSUER_ID" >> "$GITHUB_ENV"
+
+      - name: Build, sign, notarize, and staple installers
+        run: |
+          ./scripts/build-dmg.sh
+          ./scripts/build-pkg.sh
+
+      - name: Verify release artifacts
+        run: |
+          codesign --verify --deep --strict --verbose=2 dist/Glance.app
+          lipo dist/Glance.app/Contents/MacOS/Glance -verify_arch arm64 x86_64
+          xcrun stapler validate dist/Glance.dmg
+          xcrun stapler validate dist/Glance.pkg
+          spctl --assess --type execute --verbose=4 dist/Glance.app
+          spctl --assess --type open --context context:primary-signature --verbose=4 dist/Glance.dmg
+          spctl --assess --type install --verbose=4 dist/Glance.pkg
+          (cd dist && shasum -a 256 Glance.dmg Glance.pkg > SHA256SUMS.txt)
+
+      - name: Publish immutable release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/Glance.dmg \
+            dist/Glance.pkg \
+            dist/SHA256SUMS.txt \
+            --verify-tag \
+            --generate-notes \
+            --title "Glance ${GITHUB_REF_NAME#v}"
+
+      - name: Remove temporary signing keychain
+        if: always()
+        run: |
+          if [[ -n "${GLANCE_CI_KEYCHAIN:-}" && -f "$GLANCE_CI_KEYCHAIN" ]]; then
+            security delete-keychain "$GLANCE_CI_KEYCHAIN"
+          fi

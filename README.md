@@ -30,6 +30,18 @@ open dist/Glance.dmg
 
 The resulting window presents Glance and an Applications shortcut with drag instructions. Installer artwork can be regenerated with `./scripts/build-assets.sh`, which requires `rsvg-convert` from `librsvg`.
 
+To create a signed installer package for managed deployment:
+
+```sh
+./scripts/build-pkg.sh
+```
+
+The package installs Glance into `/Applications`. Package builds require a Developer ID Installer certificate; set `GLANCE_INSTALLER_IDENTITY` to select one explicitly. To notarize and staple either installer with credentials saved by `notarytool`, set `GLANCE_NOTARY_PROFILE`:
+
+```sh
+GLANCE_NOTARY_PROFILE=Glance ./scripts/build-pkg.sh
+```
+
 Release builds automatically use the first Developer ID Application certificate in the current Keychain. Set `GLANCE_SIGNING_IDENTITY` to select a specific identity. To notarize the DMG as part of the build, set `GLANCE_NOTARY_PROFILE` to a profile previously created with `xcrun notarytool store-credentials`.
 
 Glance uses saved GitHub search queries for its sections. The built-in sections show pull requests requesting your review and pull requests you opened. Edit or add validated sections in Settings.

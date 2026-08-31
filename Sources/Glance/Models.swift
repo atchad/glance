@@ -145,7 +145,7 @@ struct Preferences: Codable {
   var timeDisplayMode: TimeDisplayMode = .created
   var commandClickDismisses = true
   var notificationsEnabled = true
-  var mutedNotificationRepositories: Set<String> = []
+  var excludedRepositories: Set<String> = []
   var dismissedRevisions: [String: String] = [:]
 
   static let `default` = Preferences()
@@ -154,7 +154,7 @@ struct Preferences: Codable {
     case refreshInterval, panelLevel, openPanelAtLaunch, openAtLogin, sections
     case menuBarCountMode, showAuthor, showUpdatedAt, showCheckStatus, showReviewStatus
     case statusDisplayMode, timeDisplayMode, commandClickDismisses, notificationsEnabled
-    case mutedNotificationRepositories
+    case excludedRepositories, mutedNotificationRepositories
     case dismissedRevisions
   }
 
@@ -183,10 +183,32 @@ struct Preferences: Codable {
       try values.decodeIfPresent(Bool.self, forKey: .commandClickDismisses) ?? true
     notificationsEnabled =
       try values.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? true
-    mutedNotificationRepositories =
-      try values.decodeIfPresent(Set<String>.self, forKey: .mutedNotificationRepositories) ?? []
+    excludedRepositories =
+      try values.decodeIfPresent(Set<String>.self, forKey: .excludedRepositories)
+      ?? values.decodeIfPresent(Set<String>.self, forKey: .mutedNotificationRepositories)
+      ?? []
     dismissedRevisions =
       try values.decodeIfPresent([String: String].self, forKey: .dismissedRevisions) ?? [:]
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var values = encoder.container(keyedBy: CodingKeys.self)
+    try values.encode(refreshInterval, forKey: .refreshInterval)
+    try values.encode(panelLevel, forKey: .panelLevel)
+    try values.encode(openPanelAtLaunch, forKey: .openPanelAtLaunch)
+    try values.encode(openAtLogin, forKey: .openAtLogin)
+    try values.encode(sections, forKey: .sections)
+    try values.encode(menuBarCountMode, forKey: .menuBarCountMode)
+    try values.encode(showAuthor, forKey: .showAuthor)
+    try values.encode(showUpdatedAt, forKey: .showUpdatedAt)
+    try values.encode(showCheckStatus, forKey: .showCheckStatus)
+    try values.encode(showReviewStatus, forKey: .showReviewStatus)
+    try values.encode(statusDisplayMode, forKey: .statusDisplayMode)
+    try values.encode(timeDisplayMode, forKey: .timeDisplayMode)
+    try values.encode(commandClickDismisses, forKey: .commandClickDismisses)
+    try values.encode(notificationsEnabled, forKey: .notificationsEnabled)
+    try values.encode(excludedRepositories, forKey: .excludedRepositories)
+    try values.encode(dismissedRevisions, forKey: .dismissedRevisions)
   }
 }
 

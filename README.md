@@ -38,7 +38,7 @@ Command-click a pull request to remove that revision from Glance. If the pull re
 
 Glance keeps the last successful results visible when GitHub cannot be reached, marks refresh as unavailable, and continues to show when the queue was last updated. Opening at login is enabled by default and can be changed in Settings.
 
-Notifications are enabled for new review requests by default. Settings lists every repository seen in the current queue, and individual repositories can be muted without hiding their pull requests from Glance.
+Notifications are enabled for new review requests by default. The repository picker loads every repository available to the authenticated GitHub account, checks all of them by default, and supports search and bulk selection. Unchecking a repository removes its pull requests from the live queue and cache, and prevents notifications from that repository. Re-enabling it triggers a refresh so matching PRs can return.
 
 Authentication is read from GitHub CLI at refresh time. Glance does not persist the token. Cached pull-request metadata and preferences live in `~/Library/Application Support/Glance`.
 

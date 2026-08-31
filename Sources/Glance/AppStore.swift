@@ -17,6 +17,9 @@ final class AppStore: ObservableObject {
   @Published private(set) var connectionIssue: AppConnectionIssue?
   @Published private(set) var loginItemErrorMessage: String?
   @Published private(set) var notificationAuthorizationMessage: String?
+  @Published private(set) var accessibleRepositories: [String] = []
+  @Published private(set) var isLoadingRepositories = false
+  @Published private(set) var repositoryLoadError: String?
   @Published var preferences: Preferences { didSet { savePreferences() } }
 
   private let client = GitHubClient()
@@ -41,10 +44,16 @@ final class AppStore: ObservableObject {
     loaded.sections.removeAll { retiredQueries.contains($0.query) }
     preferences = loaded
     if let cache = Self.load(GlanceCache.self, from: Self.cacheURL) {
-      snapshots = Dictionary(uniqueKeysWithValues: cache.snapshots.map { ($0.id, $0.pullRequests) })
+      let cachedSnapshots = Dictionary(
+        uniqueKeysWithValues: cache.snapshots.map { ($0.id, $0.pullRequests) })
+      snapshots = Self.removingExcludedRepositories(
+        from: cachedSnapshots,
+        excluded: preferences.excludedRepositories
+      )
       viewerLogin = cache.viewerLogin
       lastUpdated = cache.savedAt
       hasNotificationBaseline = true
+      if !preferences.excludedRepositories.isEmpty { saveCache() }
     }
   }
 
@@ -59,14 +68,6 @@ final class AppStore: ObservableObject {
     case .openedByMe: count(forQueryContaining: "author:@me")
     case .allShown: Set(preferences.sections.flatMap { pullRequests(in: $0).map(\.id) }).count
     }
-  }
-
-  var notificationRepositories: [String] {
-    Set(snapshots.values.flatMap { $0.map(\.repository) })
-      .union(preferences.mutedNotificationRepositories)
-      .sorted {
-        $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
-      }
   }
 
   func start() {
@@ -97,15 +98,41 @@ final class AppStore: ObservableObject {
     if enabled { configureNotifications() } else { notificationAuthorizationMessage = nil }
   }
 
-  func notificationsEnabled(for repository: String) -> Bool {
-    !preferences.mutedNotificationRepositories.contains(repository)
+  func loadAccessibleRepositories() async {
+    guard !isLoadingRepositories else { return }
+    isLoadingRepositories = true
+    repositoryLoadError = nil
+    do {
+      accessibleRepositories = try await client.fetchAccessibleRepositories()
+    } catch {
+      repositoryLoadError = error.localizedDescription
+    }
+    isLoadingRepositories = false
   }
 
-  func setNotificationsEnabled(_ enabled: Bool, for repository: String) {
-    if enabled {
-      preferences.mutedNotificationRepositories.remove(repository)
-    } else {
-      preferences.mutedNotificationRepositories.insert(repository)
+  func applyRepositorySelection(_ selected: Set<String>) {
+    preferences.excludedRepositories = Self.excludedRepositories(
+      all: accessibleRepositories,
+      selected: selected
+    )
+    snapshots = Self.removingExcludedRepositories(
+      from: snapshots,
+      excluded: preferences.excludedRepositories
+    )
+    saveCache()
+    refresh()
+  }
+
+  static func excludedRepositories(all: [String], selected: Set<String>) -> Set<String> {
+    Set(all).subtracting(selected)
+  }
+
+  static func removingExcludedRepositories(
+    from snapshots: [UUID: [PullRequest]],
+    excluded: Set<String>
+  ) -> [UUID: [PullRequest]] {
+    snapshots.mapValues { pullRequests in
+      pullRequests.filter { !excluded.contains($0.repository) }
     }
   }
 
@@ -120,15 +147,19 @@ final class AppStore: ObservableObject {
       do {
         let result = try await self?.client.fetchAll(sections: sections)
         guard let self, let result else { return }
-        let nextSnapshots = Dictionary(
+        let fetchedSnapshots = Dictionary(
           uniqueKeysWithValues: result.snapshots.map { ($0.id, $0.pullRequests) })
+        let nextSnapshots = Self.removingExcludedRepositories(
+          from: fetchedSnapshots,
+          excluded: preferences.excludedRepositories
+        )
         let notifications =
           hasNotificationBaseline
           ? Self.newReviewRequests(previous: snapshots, next: nextSnapshots, sections: sections)
           : []
         snapshots = nextSnapshots
         hasNotificationBaseline = true
-        let activeIDs = Set(result.snapshots.flatMap { $0.pullRequests.map(\.id) })
+        let activeIDs = Set(nextSnapshots.values.flatMap { $0.map(\.id) })
         let retainedDismissals = preferences.dismissedRevisions.filter {
           activeIDs.contains($0.key)
         }
@@ -151,7 +182,10 @@ final class AppStore: ObservableObject {
   }
 
   func pullRequests(in section: PRSection) -> [PullRequest] {
-    (snapshots[section.id] ?? []).filter { !$0.isDismissed(by: preferences.dismissedRevisions) }
+    (snapshots[section.id] ?? []).filter {
+      !preferences.excludedRepositories.contains($0.repository)
+        && !$0.isDismissed(by: preferences.dismissedRevisions)
+    }
   }
 
   func toggleCollapse(_ section: PRSection) {
@@ -220,7 +254,7 @@ final class AppStore: ObservableObject {
   private func sendNotifications(for pullRequests: [PullRequest]) {
     guard preferences.notificationsEnabled else { return }
     let allowed = pullRequests.filter {
-      !preferences.mutedNotificationRepositories.contains($0.repository)
+      !preferences.excludedRepositories.contains($0.repository)
     }
     notificationManager.notify(about: allowed)
   }

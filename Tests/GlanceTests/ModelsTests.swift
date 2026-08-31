@@ -40,7 +40,7 @@ final class ModelsTests: XCTestCase {
     XCTAssertTrue(preferences.commandClickDismisses)
     XCTAssertTrue(preferences.openAtLogin)
     XCTAssertTrue(preferences.notificationsEnabled)
-    XCTAssertTrue(preferences.mutedNotificationRepositories.isEmpty)
+    XCTAssertTrue(preferences.excludedRepositories.isEmpty)
   }
 
   func testAllVendoredOcticonsLoad() {
@@ -82,6 +82,37 @@ final class ModelsTests: XCTestCase {
     )
 
     XCTAssertEqual(result.map(\.id), ["new-review"])
+  }
+
+  @MainActor
+  func testRepositorySelectionStoresOnlyUncheckedExceptions() {
+    let excluded = AppStore.excludedRepositories(
+      all: ["owner/api", "owner/web", "team/mobile"],
+      selected: ["owner/api", "team/mobile"]
+    )
+    XCTAssertEqual(excluded, ["owner/web"])
+  }
+
+  @MainActor
+  func testExcludedRepositoriesAreRemovedFromEveryCachedSection() {
+    let firstSection = UUID()
+    let secondSection = UUID()
+    let hidden = makePullRequest(id: "hidden", repository: "owner/hidden")
+    let visible = makePullRequest(id: "visible", repository: "owner/visible")
+
+    let filtered = AppStore.removingExcludedRepositories(
+      from: [firstSection: [hidden, visible], secondSection: [hidden]],
+      excluded: ["owner/hidden"]
+    )
+
+    XCTAssertEqual(filtered[firstSection]?.map(\.id), ["visible"])
+    XCTAssertTrue(filtered[secondSection]?.isEmpty == true)
+  }
+
+  func testLegacyMutedRepositoriesMigrateToExcludedRepositories() throws {
+    let json = #"{"mutedNotificationRepositories":["owner/legacy"]}"#
+    let preferences = try JSONDecoder().decode(Preferences.self, from: Data(json.utf8))
+    XCTAssertEqual(preferences.excludedRepositories, ["owner/legacy"])
   }
 
   func testQueryValidationRejectsLocalSyntaxErrorsBeforeNetwork() async {

@@ -18,7 +18,7 @@ struct GlanceSettingsView: View {
 private struct GeneralSettingsView: View {
   @ObservedObject var store: AppStore
   @ObservedObject var panel: FloatingPanelController
-  @State private var repositoryToMute = ""
+  @State private var showingRepositoryPicker = false
 
   var body: some View {
     Form {
@@ -73,44 +73,25 @@ private struct GeneralSettingsView: View {
             set: { store.setNotificationsEnabled($0) }
           ))
         if store.preferences.notificationsEnabled {
-          Text("All repositories are included by default.")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-          if store.notificationRepositories.isEmpty {
-            Text("Repositories appear here after the first successful refresh.")
-              .font(.caption)
-              .foregroundStyle(.secondary)
-          } else {
-            ForEach(store.notificationRepositories, id: \.self) { repository in
-              Toggle(
-                repository,
-                isOn: Binding(
-                  get: { store.notificationsEnabled(for: repository) },
-                  set: { store.setNotificationsEnabled($0, for: repository) }
-                ))
-            }
-            Text("Turning off a repository only silences notifications. Its PRs remain visible.")
-              .font(.caption)
-              .foregroundStyle(.secondary)
-          }
-          HStack {
-            TextField("owner/repository", text: $repositoryToMute)
-              .textFieldStyle(.roundedBorder)
-              .font(.system(.body, design: .monospaced))
-            Button("Mute") {
-              let repository = repositoryToMute.trimmingCharacters(in: .whitespacesAndNewlines)
-              store.setNotificationsEnabled(false, for: repository)
-              repositoryToMute = ""
-            }
-            .disabled(!validRepositoryName(repositoryToMute))
-            .help("Mute notifications for this repository")
-          }
           if let message = store.notificationAuthorizationMessage {
             Label(message, systemImage: "exclamationmark.triangle.fill")
               .font(.caption)
               .foregroundStyle(.orange)
           }
         }
+      }
+
+      Section("Repositories") {
+        Text("All repositories are included by default.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+        LabeledContent("Visible repositories") {
+          Button("Choose Repositories…") { showingRepositoryPicker = true }
+            .help("Choose which repositories appear in Glance")
+        }
+        Text(repositorySummary)
+          .font(.caption)
+          .foregroundStyle(.secondary)
       }
 
       Section("PR Rows") {
@@ -145,13 +126,119 @@ private struct GeneralSettingsView: View {
     }
     .formStyle(.grouped)
     .padding(.horizontal, 8)
+    .sheet(isPresented: $showingRepositoryPicker) {
+      RepositoryNotificationPicker(store: store)
+    }
   }
 
-  private func validRepositoryName(_ value: String) -> Bool {
-    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.contains(where: { $0.isWhitespace }) else { return false }
-    let pieces = trimmed.split(separator: "/", omittingEmptySubsequences: false)
-    return pieces.count == 2 && pieces.allSatisfy { !$0.isEmpty }
+  private var repositorySummary: String {
+    let excluded = store.preferences.excludedRepositories.count
+    if excluded == 0 { return "Every repository is visible." }
+    return
+      "\(excluded) \(excluded == 1 ? "repository is" : "repositories are") excluded from Glance."
+  }
+}
+
+private struct RepositoryNotificationPicker: View {
+  @ObservedObject var store: AppStore
+  @Environment(\.dismiss) private var dismiss
+  @State private var search = ""
+  @State private var selected: Set<String> = []
+  @State private var initialized = false
+
+  private var filteredRepositories: [String] {
+    guard !search.isEmpty else { return store.accessibleRepositories }
+    return store.accessibleRepositories.filter {
+      $0.localizedCaseInsensitiveContains(search)
+    }
+  }
+
+  var body: some View {
+    VStack(spacing: 0) {
+      HStack {
+        VStack(alignment: .leading, spacing: 2) {
+          Text("Visible Repositories").font(.headline)
+          Text("Unchecked repositories are removed from Glance and its cache.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        Spacer()
+        if !store.accessibleRepositories.isEmpty {
+          Text("\(selected.count) of \(store.accessibleRepositories.count)")
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+        }
+      }
+      .padding()
+
+      Divider()
+
+      if store.isLoadingRepositories {
+        ProgressView("Loading repositories from GitHub…")
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else if let error = store.repositoryLoadError {
+        ContentUnavailableView {
+          Label("Couldn’t Load Repositories", systemImage: "exclamationmark.triangle")
+        } description: {
+          Text(error)
+        } actions: {
+          Button("Try Again") { Task { await store.loadAccessibleRepositories() } }
+        }
+      } else {
+        VStack(spacing: 10) {
+          TextField("Search repositories", text: $search)
+            .textFieldStyle(.roundedBorder)
+            .padding(.horizontal)
+            .padding(.top, 12)
+          List(filteredRepositories, id: \.self) { repository in
+            Toggle(
+              repository,
+              isOn: Binding(
+                get: { selected.contains(repository) },
+                set: { enabled in
+                  if enabled { selected.insert(repository) } else { selected.remove(repository) }
+                }
+              )
+            )
+            .toggleStyle(.checkbox)
+          }
+          .listStyle(.inset)
+        }
+      }
+
+      Divider()
+
+      HStack {
+        Button("Select All") { selected = Set(store.accessibleRepositories) }
+          .disabled(store.accessibleRepositories.isEmpty)
+        Button("Deselect All") { selected.removeAll() }
+          .disabled(store.accessibleRepositories.isEmpty)
+        Spacer()
+        Button("Cancel") { dismiss() }
+        Button("Done") {
+          store.applyRepositorySelection(selected)
+          dismiss()
+        }
+        .keyboardShortcut(.defaultAction)
+        .disabled(store.accessibleRepositories.isEmpty || !initialized)
+      }
+      .padding()
+    }
+    .frame(width: 540, height: 560)
+    .task {
+      await store.loadAccessibleRepositories()
+      initializeSelectionIfNeeded()
+    }
+    .onChange(of: store.accessibleRepositories) { _, _ in
+      initializeSelectionIfNeeded()
+    }
+  }
+
+  private func initializeSelectionIfNeeded() {
+    guard !initialized, !store.accessibleRepositories.isEmpty else { return }
+    selected = Set(store.accessibleRepositories)
+      .subtracting(store.preferences.excludedRepositories)
+    initialized = true
   }
 }
 

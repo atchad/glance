@@ -37,6 +37,47 @@ enum QueryValidationError: LocalizedError {
 struct GitHubClient {
   private let endpoint = URL(string: "https://api.github.com/graphql")!
 
+  func fetchAccessibleRepositories() async throws -> [String] {
+    let token = try await tokenFromGitHubCLI()
+    var page = 1
+    var repositories: [String] = []
+
+    while true {
+      var components = URLComponents(string: "https://api.github.com/user/repos")!
+      components.queryItems = [
+        URLQueryItem(name: "affiliation", value: "owner,collaborator,organization_member"),
+        URLQueryItem(name: "visibility", value: "all"),
+        URLQueryItem(name: "sort", value: "full_name"),
+        URLQueryItem(name: "direction", value: "asc"),
+        URLQueryItem(name: "per_page", value: "100"),
+        URLQueryItem(name: "page", value: String(page)),
+      ]
+      guard let url = components.url else { throw GitHubError.invalidResponse }
+      var request = URLRequest(url: url)
+      request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+      request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+      request.setValue("Glance/0.1", forHTTPHeaderField: "User-Agent")
+
+      let (data, response) = try await URLSession.shared.data(for: request)
+      guard let http = response as? HTTPURLResponse else { throw GitHubError.invalidResponse }
+      guard (200..<300).contains(http.statusCode) else {
+        let message =
+          (try? JSONDecoder().decode(RESTError.self, from: data).message)
+          ?? "GitHub could not load your repositories."
+        throw GitHubError.api(message)
+      }
+
+      let batch = try JSONDecoder().decode([RESTRepository].self, from: data)
+      repositories.append(contentsOf: batch.map(\.fullName))
+      guard batch.count == 100 else { break }
+      page += 1
+    }
+
+    return Array(Set(repositories)).sorted {
+      $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+    }
+  }
+
   func fetchAll(sections: [PRSection]) async throws -> (
     viewer: String, snapshots: [SectionSnapshot]
   ) {
@@ -234,6 +275,13 @@ private struct GraphQLVariables: Encodable {
 }
 
 private struct RESTError: Decodable { let message: String }
+private struct RESTRepository: Decodable {
+  let fullName: String
+
+  private enum CodingKeys: String, CodingKey {
+    case fullName = "full_name"
+  }
+}
 
 private struct GraphQLResponse: Decodable {
   let data: GraphData?

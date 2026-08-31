@@ -21,6 +21,15 @@ To create a standalone, ad-hoc-signed application bundle:
 open dist/Glance.app
 ```
 
+To create the familiar drag-to-Applications installer disk image:
+
+```sh
+./scripts/build-dmg.sh
+open dist/Glance.dmg
+```
+
+The resulting window presents Glance and an Applications shortcut with drag instructions. Installer artwork can be regenerated with `./scripts/build-assets.sh`, which requires `rsvg-convert` from `librsvg`.
+
 Glance uses saved GitHub search queries for its sections. The built-in sections show pull requests requesting your review and pull requests you opened. Edit or add validated sections in Settings.
 
 Command-click a pull request to remove that revision from Glance. If the pull request receives a new commit, it automatically returns. This shortcut is enabled by default and can be turned off in Settings.

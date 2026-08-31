@@ -5,6 +5,10 @@ configuration="${1:-release}"
 repo_root="${0:A:h:h}"
 cd "$repo_root"
 
+if [[ ! -f "$repo_root/support/Glance.icns" ]]; then
+    "$repo_root/scripts/build-assets.sh" >/dev/null
+fi
+
 swift build -c "$configuration"
 binary_path="$(swift build -c "$configuration" --show-bin-path)/Glance"
 binary_directory="${binary_path:h}"
@@ -16,6 +20,7 @@ mkdir -p "$contents_path/MacOS" "$contents_path/Resources"
 cp "$binary_path" "$contents_path/MacOS/Glance"
 cp -R "$binary_directory/Glance_Glance.bundle" "$contents_path/Resources/Glance_Glance.bundle"
 cp "$repo_root/support/Info.plist" "$contents_path/Info.plist"
+cp "$repo_root/support/Glance.icns" "$contents_path/Resources/Glance.icns"
 codesign --force --deep --sign - "$app_path"
 
 echo "$app_path"

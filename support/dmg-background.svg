@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="660" height="400" viewBox="0 0 660 400">
+  <defs>
+    <linearGradient id="surface" x1="0" y1="0" x2="660" y2="400" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f8f9fb"/>
+      <stop offset="1" stop-color="#e9edf3"/>
+    </linearGradient>
+    <linearGradient id="arrow" x1="258" y1="205" x2="405" y2="205" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8e98a8"/>
+      <stop offset="1" stop-color="#657184"/>
+    </linearGradient>
+  </defs>
+  <rect width="660" height="400" fill="url(#surface)"/>
+  <text x="330" y="58" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Helvetica Neue, sans-serif" font-size="24" font-weight="600" fill="#1d1d1f">Install Glance</text>
+  <text x="330" y="88" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, Helvetica Neue, sans-serif" font-size="14" fill="#6e6e73">Drag Glance to Applications</text>
+  <path d="M258 198h111l-27-27 13-13 50 50-50 50-13-13 27-27H258z" fill="url(#arrow)" opacity=".9"/>
+</svg>

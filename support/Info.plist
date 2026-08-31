@@ -4,6 +4,7 @@
 <dict>
     <key>CFBundleDevelopmentRegion</key><string>en</string>
     <key>CFBundleExecutable</key><string>Glance</string>
+    <key>CFBundleIconFile</key><string>Glance</string>
     <key>CFBundleIdentifier</key><string>com.anthonychadwick.glance</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
     <key>CFBundleName</key><string>Glance</string>

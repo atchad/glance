@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import ServiceManagement
 
 enum AppConnectionIssue: Equatable {
   case authentication
@@ -14,6 +15,7 @@ final class AppStore: ObservableObject {
   @Published private(set) var lastUpdated: Date?
   @Published var errorMessage: String?
   @Published private(set) var connectionIssue: AppConnectionIssue?
+  @Published private(set) var loginItemErrorMessage: String?
   @Published var preferences: Preferences { didSet { savePreferences() } }
 
   private let client = GitHubClient()
@@ -66,6 +68,15 @@ final class AppStore: ObservableObject {
         self?.refresh()
       }
     }
+  }
+
+  func configureLoginItemAtLaunch() {
+    applyLoginItemPreference(preferences.openAtLogin)
+  }
+
+  func setOpenAtLogin(_ enabled: Bool) {
+    preferences.openAtLogin = enabled
+    applyLoginItemPreference(enabled)
   }
 
   func refresh() {
@@ -136,6 +147,31 @@ final class AppStore: ObservableObject {
       }
     } else {
       .unavailable
+    }
+  }
+
+  private func applyLoginItemPreference(_ enabled: Bool) {
+    let service = SMAppService.mainApp
+    loginItemErrorMessage = nil
+    do {
+      if enabled {
+        switch service.status {
+        case .enabled:
+          return
+        case .requiresApproval:
+          loginItemErrorMessage =
+            "Allow Glance in System Settings › General › Login Items to open it automatically."
+          return
+        case .notRegistered, .notFound:
+          try service.register()
+        @unknown default:
+          try service.register()
+        }
+      } else if service.status == .enabled || service.status == .requiresApproval {
+        try service.unregister()
+      }
+    } catch {
+      loginItemErrorMessage = "Couldn’t update the login item: \(error.localizedDescription)"
     }
   }
 

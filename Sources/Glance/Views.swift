@@ -137,7 +137,7 @@ struct DashboardView: View {
     Label(
       store.connectionIssue == .authentication
         ? "GitHub sign-in needs attention. Showing saved results."
-        : "GitHub is unavailable. Showing saved results.",
+        : "Refresh unavailable. GitHub may be having issues; your saved results are still shown.",
       systemImage: "exclamationmark.triangle.fill"
     )
     .font(.caption).foregroundStyle(.orange)

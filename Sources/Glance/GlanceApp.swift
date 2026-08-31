@@ -22,6 +22,7 @@ struct GlanceApp: App {
     _statusItem = StateObject(wrappedValue: statusItem)
     DispatchQueue.main.async {
       NSApp.setActivationPolicy(.accessory)
+      store.configureLoginItemAtLaunch()
       store.start()
       if store.preferences.openPanelAtLaunch { panel.show() }
     }

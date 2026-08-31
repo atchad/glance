@@ -24,7 +24,7 @@ final class ModelsTests: XCTestCase {
   }
 
   func testFreshTimestampUsesNaturalCopy() {
-    XCTAssertEqual(Date().updatedLabel, "Updated just now")
+    XCTAssertEqual(Date().updatedLabel, "Last updated just now")
   }
 
   func testOlderPreferencesGainNewDisplayDefaults() throws {
@@ -38,6 +38,7 @@ final class ModelsTests: XCTestCase {
     XCTAssertEqual(preferences.statusDisplayMode, .compactIcons)
     XCTAssertEqual(preferences.timeDisplayMode, .created)
     XCTAssertTrue(preferences.commandClickDismisses)
+    XCTAssertTrue(preferences.openAtLogin)
   }
 
   func testAllVendoredOcticonsLoad() {

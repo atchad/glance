@@ -25,6 +25,8 @@ Glance uses saved GitHub search queries for its sections. The built-in sections 
 
 Command-click a pull request to remove that revision from Glance. If the pull request receives a new commit, it automatically returns. This shortcut is enabled by default and can be turned off in Settings.
 
+Glance keeps the last successful results visible when GitHub cannot be reached, marks refresh as unavailable, and continues to show when the queue was last updated. Opening at login is enabled by default and can be changed in Settings.
+
 Authentication is read from GitHub CLI at refresh time. Glance does not persist the token. Cached pull-request metadata and preferences live in `~/Library/Application Support/Glance`.
 
 ## Connecting GitHub

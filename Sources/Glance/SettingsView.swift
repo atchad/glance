@@ -36,6 +36,17 @@ private struct GeneralSettingsView: View {
 
       Section("Panel") {
         Toggle(
+          "Open at login",
+          isOn: Binding(
+            get: { store.preferences.openAtLogin },
+            set: { store.setOpenAtLogin($0) }
+          ))
+        if let message = store.loginItemErrorMessage {
+          Label(message, systemImage: "exclamationmark.triangle.fill")
+            .font(.caption)
+            .foregroundStyle(.orange)
+        }
+        Toggle(
           "Keep above other windows",
           isOn: Binding(
             get: { store.preferences.panelLevel == .floating },

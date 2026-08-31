@@ -134,6 +134,7 @@ struct Preferences: Codable {
   var refreshInterval: TimeInterval = 60
   var panelLevel: PanelLevel = .floating
   var openPanelAtLaunch = true
+  var openAtLogin = true
   var sections: [PRSection] = PRSection.defaults
   var menuBarCountMode: MenuBarCountMode = .awaitingReview
   var showAuthor = true
@@ -148,7 +149,7 @@ struct Preferences: Codable {
   static let `default` = Preferences()
 
   private enum CodingKeys: String, CodingKey {
-    case refreshInterval, panelLevel, openPanelAtLaunch, sections
+    case refreshInterval, panelLevel, openPanelAtLaunch, openAtLogin, sections
     case menuBarCountMode, showAuthor, showUpdatedAt, showCheckStatus, showReviewStatus
     case statusDisplayMode, timeDisplayMode, commandClickDismisses
     case dismissedRevisions
@@ -161,6 +162,7 @@ struct Preferences: Codable {
     refreshInterval = try values.decodeIfPresent(TimeInterval.self, forKey: .refreshInterval) ?? 60
     panelLevel = try values.decodeIfPresent(PanelLevel.self, forKey: .panelLevel) ?? .floating
     openPanelAtLaunch = try values.decodeIfPresent(Bool.self, forKey: .openPanelAtLaunch) ?? true
+    openAtLogin = try values.decodeIfPresent(Bool.self, forKey: .openAtLogin) ?? true
     sections = try values.decodeIfPresent([PRSection].self, forKey: .sections) ?? PRSection.defaults
     menuBarCountMode =
       try values.decodeIfPresent(MenuBarCountMode.self, forKey: .menuBarCountMode)
@@ -193,9 +195,9 @@ extension Date {
 
   var updatedLabel: String {
     let seconds = max(0, Date().timeIntervalSince(self))
-    if seconds < 60 { return "Updated just now" }
-    if seconds < 3_600 { return "Updated \(Int(seconds / 60)) min ago" }
-    if seconds < 86_400 { return "Updated \(Int(seconds / 3_600)) hr ago" }
-    return "Updated \(Int(seconds / 86_400)) days ago"
+    if seconds < 60 { return "Last updated just now" }
+    if seconds < 3_600 { return "Last updated \(Int(seconds / 60)) min ago" }
+    if seconds < 86_400 { return "Last updated \(Int(seconds / 3_600)) hr ago" }
+    return "Last updated \(Int(seconds / 86_400)) days ago"
   }
 }

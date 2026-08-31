@@ -16,11 +16,14 @@ final class AppStore: ObservableObject {
   @Published var errorMessage: String?
   @Published private(set) var connectionIssue: AppConnectionIssue?
   @Published private(set) var loginItemErrorMessage: String?
+  @Published private(set) var notificationAuthorizationMessage: String?
   @Published var preferences: Preferences { didSet { savePreferences() } }
 
   private let client = GitHubClient()
+  private let notificationManager = NotificationManager()
   private var refreshTask: Task<Void, Never>?
   private var timerTask: Task<Void, Never>?
+  private var hasNotificationBaseline = false
 
   init() {
     var loaded = Self.load(Preferences.self, from: Self.preferencesURL) ?? .default
@@ -41,6 +44,7 @@ final class AppStore: ObservableObject {
       snapshots = Dictionary(uniqueKeysWithValues: cache.snapshots.map { ($0.id, $0.pullRequests) })
       viewerLogin = cache.viewerLogin
       lastUpdated = cache.savedAt
+      hasNotificationBaseline = true
     }
   }
 
@@ -57,8 +61,17 @@ final class AppStore: ObservableObject {
     }
   }
 
+  var notificationRepositories: [String] {
+    Set(snapshots.values.flatMap { $0.map(\.repository) })
+      .union(preferences.mutedNotificationRepositories)
+      .sorted {
+        $0.localizedCaseInsensitiveCompare($1) == .orderedAscending
+      }
+  }
+
   func start() {
     guard timerTask == nil else { return }
+    configureNotifications()
     refresh()
     timerTask = Task { [weak self] in
       while !Task.isCancelled {
@@ -79,6 +92,23 @@ final class AppStore: ObservableObject {
     applyLoginItemPreference(enabled)
   }
 
+  func setNotificationsEnabled(_ enabled: Bool) {
+    preferences.notificationsEnabled = enabled
+    if enabled { configureNotifications() } else { notificationAuthorizationMessage = nil }
+  }
+
+  func notificationsEnabled(for repository: String) -> Bool {
+    !preferences.mutedNotificationRepositories.contains(repository)
+  }
+
+  func setNotificationsEnabled(_ enabled: Bool, for repository: String) {
+    if enabled {
+      preferences.mutedNotificationRepositories.remove(repository)
+    } else {
+      preferences.mutedNotificationRepositories.insert(repository)
+    }
+  }
+
   func refresh() {
     guard !isRefreshing else { return }
     refreshTask?.cancel()
@@ -90,8 +120,14 @@ final class AppStore: ObservableObject {
       do {
         let result = try await self?.client.fetchAll(sections: sections)
         guard let self, let result else { return }
-        snapshots = Dictionary(
+        let nextSnapshots = Dictionary(
           uniqueKeysWithValues: result.snapshots.map { ($0.id, $0.pullRequests) })
+        let notifications =
+          hasNotificationBaseline
+          ? Self.newReviewRequests(previous: snapshots, next: nextSnapshots, sections: sections)
+          : []
+        snapshots = nextSnapshots
+        hasNotificationBaseline = true
         let activeIDs = Set(result.snapshots.flatMap { $0.pullRequests.map(\.id) })
         let retainedDismissals = preferences.dismissedRevisions.filter {
           activeIDs.contains($0.key)
@@ -103,6 +139,7 @@ final class AppStore: ObservableObject {
         lastUpdated = Date()
         isRefreshing = false
         saveCache()
+        sendNotifications(for: notifications)
       } catch is CancellationError {
         self?.isRefreshing = false
       } catch {
@@ -148,6 +185,44 @@ final class AppStore: ObservableObject {
     } else {
       .unavailable
     }
+  }
+
+  static func newReviewRequests(
+    previous: [UUID: [PullRequest]],
+    next: [UUID: [PullRequest]],
+    sections: [PRSection]
+  ) -> [PullRequest] {
+    let reviewSectionIDs = Set(
+      sections.filter { $0.query.contains("review-requested:@me") }.map(\.id))
+    let previousIDs = Set(reviewSectionIDs.flatMap { previous[$0, default: []].map(\.id) })
+    var emittedIDs: Set<String> = []
+    return
+      reviewSectionIDs
+      .flatMap { next[$0, default: []] }
+      .filter { !previousIDs.contains($0.id) && emittedIDs.insert($0.id).inserted }
+  }
+
+  private func configureNotifications() {
+    guard preferences.notificationsEnabled else { return }
+    Task { [weak self] in
+      do {
+        let allowed = try await self?.notificationManager.requestAuthorization() ?? false
+        self?.notificationAuthorizationMessage =
+          allowed
+          ? nil : "Notifications are disabled in System Settings."
+      } catch {
+        self?.notificationAuthorizationMessage =
+          "Couldn’t enable notifications: \(error.localizedDescription)"
+      }
+    }
+  }
+
+  private func sendNotifications(for pullRequests: [PullRequest]) {
+    guard preferences.notificationsEnabled else { return }
+    let allowed = pullRequests.filter {
+      !preferences.mutedNotificationRepositories.contains($0.repository)
+    }
+    notificationManager.notify(about: allowed)
   }
 
   private func applyLoginItemPreference(_ enabled: Bool) {

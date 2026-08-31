@@ -144,6 +144,8 @@ struct Preferences: Codable {
   var statusDisplayMode: StatusDisplayMode = .compactIcons
   var timeDisplayMode: TimeDisplayMode = .created
   var commandClickDismisses = true
+  var notificationsEnabled = true
+  var mutedNotificationRepositories: Set<String> = []
   var dismissedRevisions: [String: String] = [:]
 
   static let `default` = Preferences()
@@ -151,7 +153,8 @@ struct Preferences: Codable {
   private enum CodingKeys: String, CodingKey {
     case refreshInterval, panelLevel, openPanelAtLaunch, openAtLogin, sections
     case menuBarCountMode, showAuthor, showUpdatedAt, showCheckStatus, showReviewStatus
-    case statusDisplayMode, timeDisplayMode, commandClickDismisses
+    case statusDisplayMode, timeDisplayMode, commandClickDismisses, notificationsEnabled
+    case mutedNotificationRepositories
     case dismissedRevisions
   }
 
@@ -178,6 +181,10 @@ struct Preferences: Codable {
       try values.decodeIfPresent(TimeDisplayMode.self, forKey: .timeDisplayMode) ?? .created
     commandClickDismisses =
       try values.decodeIfPresent(Bool.self, forKey: .commandClickDismisses) ?? true
+    notificationsEnabled =
+      try values.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? true
+    mutedNotificationRepositories =
+      try values.decodeIfPresent(Set<String>.self, forKey: .mutedNotificationRepositories) ?? []
     dismissedRevisions =
       try values.decodeIfPresent([String: String].self, forKey: .dismissedRevisions) ?? [:]
   }

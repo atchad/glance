@@ -18,6 +18,7 @@ struct GlanceSettingsView: View {
 private struct GeneralSettingsView: View {
   @ObservedObject var store: AppStore
   @ObservedObject var panel: FloatingPanelController
+  @State private var repositoryToMute = ""
 
   var body: some View {
     Form {
@@ -64,6 +65,54 @@ private struct GeneralSettingsView: View {
         }
       }
 
+      Section("Notifications") {
+        Toggle(
+          "New review requests",
+          isOn: Binding(
+            get: { store.preferences.notificationsEnabled },
+            set: { store.setNotificationsEnabled($0) }
+          ))
+        if store.preferences.notificationsEnabled {
+          Text("All repositories are included by default.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+          if store.notificationRepositories.isEmpty {
+            Text("Repositories appear here after the first successful refresh.")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          } else {
+            ForEach(store.notificationRepositories, id: \.self) { repository in
+              Toggle(
+                repository,
+                isOn: Binding(
+                  get: { store.notificationsEnabled(for: repository) },
+                  set: { store.setNotificationsEnabled($0, for: repository) }
+                ))
+            }
+            Text("Turning off a repository only silences notifications. Its PRs remain visible.")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+          }
+          HStack {
+            TextField("owner/repository", text: $repositoryToMute)
+              .textFieldStyle(.roundedBorder)
+              .font(.system(.body, design: .monospaced))
+            Button("Mute") {
+              let repository = repositoryToMute.trimmingCharacters(in: .whitespacesAndNewlines)
+              store.setNotificationsEnabled(false, for: repository)
+              repositoryToMute = ""
+            }
+            .disabled(!validRepositoryName(repositoryToMute))
+            .help("Mute notifications for this repository")
+          }
+          if let message = store.notificationAuthorizationMessage {
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+              .font(.caption)
+              .foregroundStyle(.orange)
+          }
+        }
+      }
+
       Section("PR Rows") {
         Toggle("Author", isOn: $store.preferences.showAuthor)
         Toggle("Time", isOn: $store.preferences.showUpdatedAt)
@@ -96,6 +145,13 @@ private struct GeneralSettingsView: View {
     }
     .formStyle(.grouped)
     .padding(.horizontal, 8)
+  }
+
+  private func validRepositoryName(_ value: String) -> Bool {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.contains(where: { $0.isWhitespace }) else { return false }
+    let pieces = trimmed.split(separator: "/", omittingEmptySubsequences: false)
+    return pieces.count == 2 && pieces.allSatisfy { !$0.isEmpty }
   }
 }
 

@@ -66,6 +66,25 @@ hdiutil detach "$device" -quiet
 device=""
 rm -f "$dmg_path"
 hdiutil convert -quiet "$read_write_dmg" -format UDZO -imagekey zlib-level=9 -o "$dmg_path"
-codesign --force --sign - "$dmg_path"
+
+signing_identity="${GLANCE_SIGNING_IDENTITY:-}"
+if [[ -z "$signing_identity" ]]; then
+  signing_identity="$(security find-identity -v -p codesigning \
+    | sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' \
+    | head -n 1)"
+fi
+
+if [[ -n "$signing_identity" ]]; then
+  codesign --force --timestamp --sign "$signing_identity" "$dmg_path"
+else
+  print -u2 "No Developer ID Application identity found; using an ad-hoc DMG signature."
+  codesign --force --sign - "$dmg_path"
+fi
+
+if [[ -n "${GLANCE_NOTARY_PROFILE:-}" ]]; then
+  xcrun notarytool submit "$dmg_path" --keychain-profile "$GLANCE_NOTARY_PROFILE" --wait
+  xcrun stapler staple "$dmg_path"
+  xcrun stapler validate "$dmg_path"
+fi
 
 echo "$dmg_path"

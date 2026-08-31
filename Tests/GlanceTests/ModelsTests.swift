@@ -39,6 +39,8 @@ final class ModelsTests: XCTestCase {
     XCTAssertEqual(preferences.timeDisplayMode, .created)
     XCTAssertTrue(preferences.commandClickDismisses)
     XCTAssertTrue(preferences.openAtLogin)
+    XCTAssertTrue(preferences.notificationsEnabled)
+    XCTAssertTrue(preferences.mutedNotificationRepositories.isEmpty)
   }
 
   func testAllVendoredOcticonsLoad() {
@@ -65,6 +67,23 @@ final class ModelsTests: XCTestCase {
     XCTAssertFalse(pullRequest.isDismissed(by: [pullRequest.id: "new-head-sha"]))
   }
 
+  @MainActor
+  func testOnlyNewPullRequestsInReviewSectionsBecomeNotifications() {
+    let reviewSection = PRSection(name: "For Review", query: "is:pr review-requested:@me")
+    let mineSection = PRSection(name: "Opened by Me", query: "is:pr author:@me")
+    let existing = makePullRequest(id: "existing", repository: "owner/api")
+    let newReview = makePullRequest(id: "new-review", repository: "owner/web")
+    let newMine = makePullRequest(id: "new-mine", repository: "owner/desktop")
+
+    let result = AppStore.newReviewRequests(
+      previous: [reviewSection.id: [existing]],
+      next: [reviewSection.id: [existing, newReview], mineSection.id: [newMine]],
+      sections: [reviewSection, mineSection]
+    )
+
+    XCTAssertEqual(result.map(\.id), ["new-review"])
+  }
+
   func testQueryValidationRejectsLocalSyntaxErrorsBeforeNetwork() async {
     do {
       try await GitHubClient().validateSearchQuery("is:open author:@me")
@@ -86,9 +105,14 @@ final class ModelsTests: XCTestCase {
     }
   }
 
-  private func makePullRequest(checks: PullRequest.CheckState, reviewers: [String]) -> PullRequest {
+  private func makePullRequest(
+    id: String = "PR_1",
+    repository: String = "owner/repo",
+    checks: PullRequest.CheckState = .success,
+    reviewers: [String] = []
+  ) -> PullRequest {
     PullRequest(
-      id: "PR_1", number: 1, repository: "owner/repo", title: "Test", author: "author",
+      id: id, number: 1, repository: repository, title: "Test", author: "author",
       authorAvatarURL: nil, url: URL(string: "https://github.com/owner/repo/pull/1")!,
       branch: "feature", headRefOID: "abc123",
       createdAt: .now, reviewRequestedAt: nil, updatedAt: .now, isDraft: false, reviewDecision: nil,

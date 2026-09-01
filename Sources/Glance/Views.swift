@@ -28,8 +28,8 @@ struct DashboardView: View {
               sectionView(section)
             }
           }
+          .background(OverlayScrollViewConfigurator())
         }
-        .background(OverlayScrollViewConfigurator())
       }
       Divider()
       footer
@@ -172,8 +172,11 @@ private struct OverlayScrollViewConfigurator: NSViewRepresentable {
   func makeCoordinator() -> Coordinator { Coordinator() }
 
   func makeNSView(context: Context) -> NSView {
-    let view = NSView()
-    context.coordinator.attach(to: view)
+    let view = ScrollViewProbe()
+    view.didAttach = { [weak coordinator = context.coordinator, weak view] in
+      guard let view else { return }
+      coordinator?.attach(to: view)
+    }
     return view
   }
 
@@ -181,30 +184,102 @@ private struct OverlayScrollViewConfigurator: NSViewRepresentable {
     context.coordinator.attach(to: nsView)
   }
 
+  private final class ScrollViewProbe: NSView {
+    var didAttach: (() -> Void)?
+
+    override func viewDidMoveToSuperview() {
+      super.viewDidMoveToSuperview()
+      DispatchQueue.main.async { [weak self] in self?.didAttach?() }
+    }
+
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+      DispatchQueue.main.async { [weak self] in self?.didAttach?() }
+    }
+  }
+
   final class Coordinator {
     private weak var scrollView: NSScrollView?
-    private var resignObserver: NSObjectProtocol?
+    private var observers: [NSObjectProtocol] = []
+    private var fallbackHide: DispatchWorkItem?
+    private var isScrolling = false
 
-    deinit {
-      if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
-    }
+    deinit { removeObservers() }
 
     func attach(to view: NSView) {
       DispatchQueue.main.async { [weak self, weak view] in
         guard let self, let scrollView = view?.enclosingScrollView else { return }
+        guard self.scrollView !== scrollView else {
+          scrollView.scrollerStyle = .overlay
+          scrollView.autohidesScrollers = true
+          if !self.isScrolling { self.hideScroller() }
+          return
+        }
+
+        self.removeObservers()
         self.scrollView = scrollView
         scrollView.scrollerStyle = .overlay
         scrollView.autohidesScrollers = true
-        if self.resignObserver == nil {
-          self.resignObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.didResignActiveNotification,
-            object: nil,
-            queue: .main
-          ) { [weak self] _ in
-            self?.scrollView?.verticalScroller?.animator().alphaValue = 0
-          }
-        }
+        self.hideScroller()
+        self.observeScrollActivity(on: scrollView)
       }
+    }
+
+    private func observeScrollActivity(on scrollView: NSScrollView) {
+      let center = NotificationCenter.default
+      observers = [
+        center.addObserver(
+          forName: NSScrollView.willStartLiveScrollNotification,
+          object: scrollView,
+          queue: .main
+        ) { [weak self] _ in self?.showScroller() },
+        center.addObserver(
+          forName: NSScrollView.didLiveScrollNotification,
+          object: scrollView,
+          queue: .main
+        ) { [weak self] _ in self?.showScrollerWithFallbackHide() },
+        center.addObserver(
+          forName: NSScrollView.didEndLiveScrollNotification,
+          object: scrollView,
+          queue: .main
+        ) { [weak self] _ in self?.hideScroller() },
+        center.addObserver(
+          forName: NSApplication.didResignActiveNotification,
+          object: nil,
+          queue: .main
+        ) { [weak self] _ in self?.hideScroller() },
+      ]
+    }
+
+    private func showScroller() {
+      fallbackHide?.cancel()
+      isScrolling = true
+      guard let scroller = scrollView?.verticalScroller else { return }
+      scroller.isHidden = false
+      scroller.alphaValue = 1
+    }
+
+    private func showScrollerWithFallbackHide() {
+      showScroller()
+      let work = DispatchWorkItem { [weak self] in self?.hideScroller() }
+      fallbackHide = work
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
+    }
+
+    private func hideScroller() {
+      fallbackHide?.cancel()
+      fallbackHide = nil
+      isScrolling = false
+      guard let scroller = scrollView?.verticalScroller else { return }
+      scroller.alphaValue = 0
+      scroller.isHidden = true
+    }
+
+    private func removeObservers() {
+      fallbackHide?.cancel()
+      fallbackHide = nil
+      observers.forEach(NotificationCenter.default.removeObserver)
+      observers.removeAll()
     }
   }
 }

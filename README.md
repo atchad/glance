@@ -1,71 +1,98 @@
-# Glance
+<p align="center">
+  <img src="support/AppIcon.svg" width="128" height="128" alt="Glance app icon">
+</p>
 
-Glance is a native macOS pull-request HUD: a menu-bar utility with a detachable, always-on-top panel for the GitHub work that needs your attention.
+<h1 align="center">Glance</h1>
 
-## Requirements
+<p align="center">
+  A native macOS pull-request HUD for the work that needs your attention.
+</p>
 
-- macOS 14 or newer
-- Xcode 16 or newer
-- [GitHub CLI](https://cli.github.com/) authenticated with `gh auth login`
+Glance keeps your GitHub pull requests one click away in the menu bar. Open its compact popover for a quick check, or detach it into an always-on-top panel while you work.
 
-## Build and run
+## What Glance does
+
+- Shows review requests, pull requests you opened, and any other sections you define with GitHub search queries.
+- Surfaces draft, review, required-check, and stacked-pull-request status without opening a browser.
+- Displays an attention count directly in the menu bar.
+- Notifies you when a new review request arrives.
+- Lets you choose which repositories appear in the app and can generate notifications.
+- Keeps the last successful results visible when GitHub is temporarily unavailable.
+- Opens at login and refreshes automatically on your preferred schedule.
+
+Command-click a pull request to dismiss its current revision. If a new commit is pushed, the pull request returns automatically.
+
+## Install
+
+Glance requires macOS 14 or later and an authenticated installation of [GitHub CLI](https://cli.github.com/).
+
+1. Install GitHub CLI if needed:
+
+   ```sh
+   brew install gh
+   ```
+
+2. Connect it to GitHub:
+
+   ```sh
+   gh auth login
+   ```
+
+3. [Download the latest Glance DMG](https://github.com/atchad/glance/releases/latest/download/Glance.dmg), open it, and drag Glance into Applications.
+4. Launch Glance. Its pull-request count will appear in the menu bar.
+
+Glance releases are universal for Apple silicon and Intel Macs, signed with a Developer ID certificate, and notarized by Apple.
+
+> [!NOTE]
+> Glance is currently a preview. GitHub CLI provides authentication for now; a future general-distribution build should use a GitHub App and browser-based sign-in.
+
+## Make it yours
+
+Glance starts with sections for pull requests requesting your review and pull requests you opened. In Settings, you can:
+
+- Add, rename, reorder, or remove sections backed by validated GitHub pull-request searches.
+- Include or exclude repositories with search and bulk selection.
+- Choose which pull requests contribute to the menu-bar count.
+- Control notifications, refresh frequency, launch behavior, and panel behavior.
+- Adjust row details, status presentation, and completed-review filtering.
+
+Click a pull request to open it on GitHub. Its context menu can also copy the URL or branch name.
+
+## Privacy and local data
+
+Glance asks GitHub CLI for your existing token when it refreshes and does not persist that token itself. Pull-request metadata and preferences are stored locally in:
+
+```text
+~/Library/Application Support/Glance
+```
+
+Excluding a repository removes its pull requests from the live queue and local cache and prevents new-review notifications from that repository.
+
+## Build from source
+
+Building Glance requires macOS 14 or later and Xcode 16 or later.
 
 ```sh
+git clone git@github.com:atchad/glance.git
+cd glance
 swift run Glance
 ```
 
-To create a standalone, ad-hoc-signed application bundle:
+Run the test suite with:
+
+```sh
+swift test
+```
+
+Create a standalone application bundle or DMG with:
 
 ```sh
 ./scripts/build-app.sh
-open dist/Glance.app
-```
-
-To create the familiar drag-to-Applications installer disk image:
-
-```sh
 ./scripts/build-dmg.sh
-open dist/Glance.dmg
 ```
 
-The resulting window presents Glance and an Applications shortcut with drag instructions. Installer artwork can be regenerated with `./scripts/build-assets.sh`, which requires `rsvg-convert` from `librsvg`.
+Without a Developer ID certificate in your Keychain, local artifacts receive an ad-hoc signature. Maintainer signing, notarization, and tagged-release instructions are documented in [docs/RELEASING.md](docs/RELEASING.md).
 
-To create a signed installer package for managed deployment:
+## Acknowledgments
 
-```sh
-./scripts/build-pkg.sh
-```
-
-The package installs Glance into `/Applications`. Package builds require a Developer ID Installer certificate; set `GLANCE_INSTALLER_IDENTITY` to select one explicitly. To notarize and staple either installer with credentials saved by `notarytool`, set `GLANCE_NOTARY_PROFILE`:
-
-```sh
-GLANCE_NOTARY_PROFILE=Glance ./scripts/build-pkg.sh
-```
-
-Release builds automatically use the first Developer ID Application certificate in the current Keychain. Set `GLANCE_SIGNING_IDENTITY` to select a specific identity. To notarize the DMG as part of the build, set `GLANCE_NOTARY_PROFILE` to a profile previously created with `xcrun notarytool store-credentials`.
-
-CI runs for every pull request and push to `main`. Version tags build universal Apple silicon/Intel installers, sign them in an ephemeral Keychain, notarize them with an App Store Connect API key, verify them with Gatekeeper, and publish them as GitHub Release assets. See [docs/RELEASING.md](docs/RELEASING.md) for the one-time secret setup and release procedure.
-
-Glance uses saved GitHub search queries for its sections. The built-in sections show pull requests requesting your review and pull requests you opened. Edit or add validated sections in Settings.
-
-Command-click a pull request to remove that revision from Glance. If the pull request receives a new commit, it automatically returns. This shortcut is enabled by default and can be turned off in Settings.
-
-Glance keeps the last successful results visible when GitHub cannot be reached, marks refresh as unavailable, and continues to show when the queue was last updated. Opening at login is enabled by default and can be changed in Settings.
-
-Notifications are enabled for new review requests by default. The repository picker loads every repository available to the authenticated GitHub account, checks all of them by default, and supports search and bulk selection. Unchecking a repository removes its pull requests from the live queue and cache, and prevents notifications from that repository. Re-enabling it triggers a refresh so matching PRs can return.
-
-Authentication is read from GitHub CLI at refresh time. Glance does not persist the token. Cached pull-request metadata and preferences live in `~/Library/Application Support/Glance`.
-
-## Connecting GitHub
-
-This preview uses GitHub CLI authentication:
-
-1. Install [GitHub CLI](https://cli.github.com/).
-2. Run `gh auth login` and complete GitHub's browser sign-in.
-3. Open Glance, or choose **Check Connection** in Settings.
-
-If Glance cannot find an authenticated GitHub CLI account, it shows this setup process in the panel. A generally distributed build should replace this developer-oriented flow with a registered GitHub App and browser-based OAuth/PKCE sign-in.
-
-## Icons
-
-GitHub interface glyphs are from [Primer Octicons](https://github.com/primer/octicons) and are distributed under the MIT License. The license is included with the packaged resources.
+GitHub interface glyphs are from [Primer Octicons](https://github.com/primer/octicons) and are distributed under the MIT License. The packaged license is included in [`Sources/Glance/Resources/Octicons/LICENSE`](Sources/Glance/Resources/Octicons/LICENSE).

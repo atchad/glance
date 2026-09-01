@@ -340,7 +340,7 @@ private struct PendingReviewLabel: View {
     HStack(spacing: 4) {
       Circle()
         .fill(.yellow)
-        .frame(width: 7, height: 7)
+        .frame(width: 11, height: 11)
       if showText { Text("Review pending").foregroundStyle(.secondary) }
     }
     .font(.caption2)

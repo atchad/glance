@@ -1,100 +1,163 @@
 import SwiftUI
 
-struct GlanceSettingsView: View {
-  @ObservedObject var store: AppStore
-  @ObservedObject var panel: FloatingPanelController
+private enum SettingsCategory: String, CaseIterable, Identifiable {
+  case general, reviews, github, sections
 
-  var body: some View {
-    TabView {
-      GeneralSettingsView(store: store, panel: panel)
-        .tabItem { Label("General", systemImage: "gearshape") }
-      SectionSettingsView(store: store)
-        .tabItem { Label("Sections", systemImage: "list.bullet") }
+  var id: Self { self }
+  var title: String {
+    switch self {
+    case .general: "General"
+    case .reviews: "Pull Requests"
+    case .github: "GitHub"
+    case .sections: "Sections"
     }
-    .frame(minWidth: 500, idealWidth: 520, minHeight: 420, idealHeight: 465)
+  }
+  var symbol: String {
+    switch self {
+    case .general: "gearshape"
+    case .reviews: "arrow.triangle.branch"
+    case .github: "chevron.left.forwardslash.chevron.right"
+    case .sections: "list.bullet.rectangle"
+    }
+  }
+  var color: Color {
+    switch self {
+    case .general: Color(nsColor: .systemGray)
+    case .reviews: Color(nsColor: .systemIndigo)
+    case .github: Color(nsColor: .systemBlue)
+    case .sections: Color(nsColor: .systemTeal)
+    }
   }
 }
 
-private struct GeneralSettingsView: View {
-  @ObservedObject var store: AppStore
-  @ObservedObject var panel: FloatingPanelController
-  @State private var showingRepositoryPicker = false
+private struct SettingsCategoryLabel: View {
+  let category: SettingsCategory
 
   var body: some View {
-    Form {
-      Section("Account") {
-        LabeledContent(
-          "GitHub account", value: store.viewerLogin.map { "@\($0)" } ?? "Not connected")
-        HStack {
-          Text("Uses GitHub CLI authentication")
-            .foregroundStyle(.secondary)
-          Spacer()
-          Link("Setup…", destination: URL(string: "https://cli.github.com/")!)
-          Button("Check Connection") { store.refresh() }
-            .help("Check your GitHub CLI sign-in")
-        }
+    Label {
+      Text(category.title)
+    } icon: {
+      ZStack {
+        RoundedRectangle(cornerRadius: 5, style: .continuous)
+          .fill(
+            LinearGradient(
+              colors: [category.color.opacity(0.72), category.color],
+              startPoint: .top,
+              endPoint: .bottom)
+          )
+          .overlay {
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+              .stroke(.white.opacity(0.18), lineWidth: 0.5)
+          }
+        Image(systemName: category.symbol)
+          .font(.system(size: 12, weight: .semibold))
+          .foregroundStyle(.white)
       }
+      .frame(width: 22, height: 22)
+      .shadow(color: .black.opacity(0.2), radius: 1, y: 1)
+    }
+  }
+}
 
-      Section("Panel") {
+struct GlanceSettingsView: View {
+  @ObservedObject var store: AppStore
+  @ObservedObject var panel: FloatingPanelController
+  @State private var selection: SettingsCategory = .general
+  @State private var columnVisibility: NavigationSplitViewVisibility = .all
+
+  var body: some View {
+    NavigationSplitView(columnVisibility: $columnVisibility) {
+      List(SettingsCategory.allCases, selection: $selection) { category in
+        SettingsCategoryLabel(category: category)
+          .tag(category)
+      }
+      .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 220)
+    } detail: {
+      settingsPage
+        .toolbar(removing: .sidebarToggle)
+    }
+    .onChange(of: columnVisibility) { _, visibility in
+      if visibility != .all { columnVisibility = .all }
+    }
+    .frame(minWidth: 720, idealWidth: 800, minHeight: 540, idealHeight: 600)
+  }
+
+  @ViewBuilder private var settingsPage: some View {
+    switch selection {
+    case .general: GeneralSettingsPage(store: store, panel: panel)
+    case .reviews: ReviewSettingsPage(store: store)
+    case .github: GitHubSettingsPage(store: store)
+    case .sections: SectionSettingsView(store: store)
+    }
+  }
+}
+
+private struct GeneralSettingsPage: View {
+  @ObservedObject var store: AppStore
+  @ObservedObject var panel: FloatingPanelController
+  var body: some View {
+    SettingsForm {
+      Section("Startup") {
         Toggle(
-          "Open at login",
+          "Open Glance at login",
           isOn: Binding(
             get: { store.preferences.openAtLogin },
-            set: { store.setOpenAtLogin($0) }
-          ))
+            set: { store.setOpenAtLogin($0) }))
         if let message = store.loginItemErrorMessage {
-          Label(message, systemImage: "exclamationmark.triangle.fill")
-            .font(.caption)
-            .foregroundStyle(.orange)
+          SettingsWarning(message: message)
         }
+        Toggle("Open the panel when Glance starts", isOn: $store.preferences.openPanelAtLaunch)
+      }
+      Section("Window") {
         Toggle(
-          "Keep above other windows",
+          "Keep the panel above other windows",
           isOn: Binding(
             get: { store.preferences.panelLevel == .floating },
             set: {
               store.preferences.panelLevel = $0 ? .floating : .desktop
               panel.applyLevel()
-            }
-          ))
-        Toggle("Open when Glance starts", isOn: $store.preferences.openPanelAtLaunch)
+            }))
       }
-
       Section("Menu Bar") {
         Picker("Count", selection: $store.preferences.menuBarCountMode) {
           ForEach(MenuBarCountMode.allCases) { mode in Text(mode.title).tag(mode) }
         }
       }
+      Section("Refresh") {
+        Picker("Check for updates", selection: $store.preferences.refreshInterval) {
+          Text("Every 15 seconds").tag(TimeInterval(15))
+          Text("Every 30 seconds").tag(TimeInterval(30))
+          Text("Every minute").tag(TimeInterval(60))
+          Text("Every 2 minutes").tag(TimeInterval(120))
+          Text("Every 5 minutes").tag(TimeInterval(300))
+          Text("Every 10 minutes").tag(TimeInterval(600))
+          Text("Every 15 minutes").tag(TimeInterval(900))
+        }
+      }
+    }
+  }
+}
 
-      Section("Notifications") {
+private struct ReviewSettingsPage: View {
+  @ObservedObject var store: AppStore
+  var body: some View {
+    SettingsForm {
+      Section("Completed Reviews") {
         Toggle(
-          "New review requests",
-          isOn: Binding(
-            get: { store.preferences.notificationsEnabled },
-            set: { store.setNotificationsEnabled($0) }
-          ))
-        if store.preferences.notificationsEnabled {
-          if let message = store.notificationAuthorizationMessage {
-            Label(message, systemImage: "exclamationmark.triangle.fill")
-              .font(.caption)
-              .foregroundStyle(.orange)
-          }
-        }
+          "Remove pull requests after I approve them",
+          isOn: $store.preferences.removePullRequestsAfterApproval)
+        Toggle(
+          "Show again when new changes are pushed",
+          isOn: $store.preferences.showChangedPullRequestsAfterApproval
+        )
+        .disabled(!store.preferences.removePullRequestsAfterApproval)
+        Toggle(
+          "Show again when my review is re-requested",
+          isOn: $store.preferences.showRerequestedPullRequestsAfterApproval
+        )
+        .disabled(!store.preferences.removePullRequestsAfterApproval)
       }
-
-      Section("Repositories") {
-        Text("All repositories are included by default.")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-        LabeledContent("Visible repositories") {
-          Button("Choose Repositories…") { showingRepositoryPicker = true }
-            .help("Choose which repositories appear in Glance")
-        }
-        Text(repositorySummary)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-      }
-
-      Section("PR Rows") {
+      Section("Row Details") {
         Toggle("Author", isOn: $store.preferences.showAuthor)
         Toggle("Time", isOn: $store.preferences.showUpdatedAt)
         if store.preferences.showUpdatedAt {
@@ -111,67 +174,72 @@ private struct GeneralSettingsView: View {
           "Command-click removes a PR until it changes",
           isOn: $store.preferences.commandClickDismisses)
       }
+    }
+  }
+}
 
-      Section("Refresh") {
-        Picker("Check for updates", selection: $store.preferences.refreshInterval) {
-          Text("Every 15 seconds").tag(TimeInterval(15))
-          Text("Every 30 seconds").tag(TimeInterval(30))
-          Text("Every minute").tag(TimeInterval(60))
-          Text("Every 2 minutes").tag(TimeInterval(120))
-          Text("Every 5 minutes").tag(TimeInterval(300))
-          Text("Every 10 minutes").tag(TimeInterval(600))
-          Text("Every 15 minutes").tag(TimeInterval(900))
+private struct GitHubSettingsPage: View {
+  @ObservedObject var store: AppStore
+  @State private var showingRepositoryPicker = false
+  var body: some View {
+    SettingsForm {
+      Section("Account") {
+        LabeledContent(
+          "GitHub account", value: store.viewerLogin.map { "@\($0)" } ?? "Not connected")
+        LabeledContent("Authentication") {
+          HStack {
+            Link("GitHub CLI Setup…", destination: URL(string: "https://cli.github.com/")!)
+            Button("Check Connection") { store.refresh() }
+          }
+        }
+      }
+      Section("Repositories") {
+        LabeledContent("Visible repositories") {
+          Button("Choose Repositories…") { showingRepositoryPicker = true }
+        }
+        Text(repositorySummary).font(.caption).foregroundStyle(.secondary)
+      }
+      Section("Notifications") {
+        Toggle(
+          "Notify me about new review requests",
+          isOn: Binding(
+            get: { store.preferences.notificationsEnabled },
+            set: { store.setNotificationsEnabled($0) }))
+        if store.preferences.notificationsEnabled,
+          let message = store.notificationAuthorizationMessage
+        {
+          SettingsWarning(message: message)
         }
       }
     }
-    .formStyle(.grouped)
-    .toggleStyle(GlanceSwitchToggleStyle())
-    .contentMargins(.horizontal, 4, for: .scrollContent)
-    .contentMargins(.vertical, 8, for: .scrollContent)
     .sheet(isPresented: $showingRepositoryPicker) {
       RepositoryNotificationPicker(store: store)
     }
   }
-
   private var repositorySummary: String {
     let excluded = store.preferences.excludedRepositories.count
     if excluded == 0 { return "Every repository is visible." }
-    return
-      "\(excluded) \(excluded == 1 ? "repository is" : "repositories are") excluded from Glance."
+    return "\(excluded) \(excluded == 1 ? "repository is" : "repositories are") excluded."
   }
 }
 
-private struct GlanceSwitchToggleStyle: ToggleStyle {
-  @Environment(\.isEnabled) private var isEnabled
+private struct SettingsForm<Content: View>: View {
+  @ViewBuilder let content: Content
+  var body: some View {
+    Form { content }
+      .formStyle(.grouped)
+      .toggleStyle(.switch)
+      .contentMargins(.horizontal, 0, for: .scrollContent)
+      .contentMargins(.top, -12, for: .scrollContent)
+      .contentMargins(.bottom, 10, for: .scrollContent)
+  }
+}
 
-  func makeBody(configuration: Configuration) -> some View {
-    Button {
-      configuration.isOn.toggle()
-    } label: {
-      HStack(spacing: 12) {
-        configuration.label
-        Spacer(minLength: 12)
-        Capsule(style: .continuous)
-          .fill(configuration.isOn ? Color.accentColor : Color.secondary.opacity(0.28))
-          .frame(width: 36, height: 20)
-          .overlay(alignment: configuration.isOn ? .trailing : .leading) {
-            Circle()
-              .fill(.white)
-              .frame(width: 16, height: 16)
-              .shadow(color: .black.opacity(0.18), radius: 1, y: 0.5)
-              .padding(2)
-          }
-          .overlay {
-            Capsule(style: .continuous)
-              .stroke(.primary.opacity(configuration.isOn ? 0.08 : 0.16), lineWidth: 0.5)
-          }
-      }
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .opacity(isEnabled ? 1 : 0.5)
-    .animation(.easeOut(duration: 0.14), value: configuration.isOn)
-    .accessibilityValue(configuration.isOn ? "On" : "Off")
+private struct SettingsWarning: View {
+  let message: String
+  var body: some View {
+    Label(message, systemImage: "exclamationmark.triangle.fill")
+      .font(.caption).foregroundStyle(.orange)
   }
 }
 
@@ -294,85 +362,89 @@ private struct SectionSettingsView: View {
   var body: some View {
     VStack(spacing: 0) {
       List {
-        ForEach($store.preferences.sections) { $section in
-          HStack(alignment: .center, spacing: 10) {
-            VStack(alignment: .leading, spacing: 5) {
-              TextField("Section name", text: $section.name)
-                .textFieldStyle(.plain)
-                .font(.body)
-              TextField("GitHub search", text: $section.query)
-                .textFieldStyle(.plain)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
+        Section("Displayed in this order") {
+          ForEach($store.preferences.sections) { $section in
+            HStack(alignment: .center, spacing: 10) {
+              VStack(alignment: .leading, spacing: 5) {
+                TextField("Section name", text: $section.name)
+                  .textFieldStyle(.plain)
+                  .font(.body)
+                TextField("GitHub search", text: $section.query)
+                  .textFieldStyle(.plain)
+                  .font(.system(.caption, design: .monospaced))
+                  .foregroundStyle(.secondary)
+              }
+              Button {
+                store.preferences.sections.removeAll { $0.id == section.id }
+                store.refresh()
+              } label: {
+                Image(systemName: "minus.circle.fill")
+              }
+              .buttonStyle(.borderless)
+              .foregroundStyle(.secondary)
+              .help("Remove section")
             }
-            Button {
-              store.preferences.sections.removeAll { $0.id == section.id }
-              store.refresh()
-            } label: {
-              Image(systemName: "minus.circle.fill")
-            }
-            .buttonStyle(.borderless)
-            .foregroundStyle(.secondary)
-            .help("Remove section")
+            .padding(.vertical, 5)
           }
-          .padding(.vertical, 5)
         }
       }
       .listStyle(.inset)
 
       Divider()
 
-      HStack(spacing: 8) {
-        TextField("Section name", text: $draftName)
-          .textFieldStyle(.roundedBorder)
-          .frame(width: 150)
-        TextField("GitHub search", text: $draftQuery)
-          .textFieldStyle(.roundedBorder)
-          .font(.system(.body, design: .monospaced))
-          .onChange(of: draftQuery) { _, _ in validationState = .idle }
-        Button {
-          validationState = .validating
-          Task {
-            if let error = await store.validateSectionQuery(draftQuery) {
-              validationState = .invalid(error)
+      VStack(alignment: .leading, spacing: 10) {
+        Text("Add a Section")
+          .font(.headline)
+        HStack(spacing: 8) {
+          TextField("Section name", text: $draftName)
+            .textFieldStyle(.roundedBorder)
+            .frame(width: 150)
+          TextField("GitHub search", text: $draftQuery)
+            .textFieldStyle(.roundedBorder)
+            .font(.system(.body, design: .monospaced))
+            .onChange(of: draftQuery) { _, _ in validationState = .idle }
+          Button {
+            validationState = .validating
+            Task {
+              if let error = await store.validateSectionQuery(draftQuery) {
+                validationState = .invalid(error)
+              } else {
+                validationState = .valid
+              }
+            }
+          } label: {
+            if validationState == .validating {
+              ProgressView().controlSize(.small).frame(width: 48)
             } else {
-              validationState = .valid
+              Text("Validate")
             }
           }
-        } label: {
-          if validationState == .validating {
-            ProgressView().controlSize(.small).frame(width: 48)
-          } else {
-            Text("Validate")
+          .disabled(validationState == .validating)
+          .help("Validate this search with GitHub")
+          Button {
+            guard !draftName.trimmingCharacters(in: .whitespaces).isEmpty,
+              !draftQuery.trimmingCharacters(in: .whitespaces).isEmpty
+            else { return }
+            store.preferences.sections.append(PRSection(name: draftName, query: draftQuery))
+            draftName = ""
+            draftQuery = "is:pr is:open "
+            validationState = .idle
+            store.refresh()
+          } label: {
+            Image(systemName: "plus")
           }
+          .buttonStyle(.bordered)
+          .disabled(
+            validationState != .valid
+              || draftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          )
+          .help("Add section")
         }
-        .disabled(validationState == .validating)
-        .help("Validate this search with GitHub")
-        Button {
-          guard !draftName.trimmingCharacters(in: .whitespaces).isEmpty,
-            !draftQuery.trimmingCharacters(in: .whitespaces).isEmpty
-          else { return }
-          store.preferences.sections.append(PRSection(name: draftName, query: draftQuery))
-          draftName = ""
-          draftQuery = "is:pr is:open "
-          validationState = .idle
-          store.refresh()
-        } label: {
-          Image(systemName: "plus")
-        }
-        .buttonStyle(.bordered)
-        .disabled(
-          validationState != .valid
-            || draftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        )
-        .help("Add section")
+        validationMessage
+          .frame(maxWidth: .infinity, alignment: .leading)
       }
-      .padding(12)
-
-      validationMessage
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.bottom, 12)
+      .padding(16)
+      .background(.bar)
     }
   }
 

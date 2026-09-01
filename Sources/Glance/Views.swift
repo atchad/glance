@@ -8,6 +8,7 @@ struct DashboardView: View {
   var surface: DashboardSurface
   var togglePanel: (() -> Void)?
   var openSettings: (() -> Void)?
+  var didOpenPullRequest: (() -> Void)?
 
   var body: some View {
     VStack(spacing: 0) {
@@ -124,7 +125,10 @@ struct DashboardView: View {
             PullRequestRow(
               pullRequest: pullRequest,
               preferences: store.preferences,
-              open: { store.open(pullRequest) },
+              open: {
+                store.open(pullRequest)
+                didOpenPullRequest?()
+              },
               dismiss: { store.dismiss(pullRequest) }
             )
             if pullRequest.id != items.last?.id { Divider().padding(.leading, 30) }
@@ -322,12 +326,27 @@ private struct PullRequestRow: View {
       StatusLabel(
         icon: .changesRequested, text: "Changes requested", color: .red, showText: showText)
     case "REVIEW_REQUIRED":
-      StatusLabel(
-        icon: .reviewPending, text: "Review pending", color: .yellow, showText: showText,
-        iconScale: 2)
+      PendingReviewLabel(showText: showText)
     default:
       EmptyView()
     }
+  }
+}
+
+private struct PendingReviewLabel: View {
+  let showText: Bool
+
+  var body: some View {
+    HStack(spacing: 4) {
+      Circle()
+        .fill(.yellow)
+        .frame(width: 7, height: 7)
+      if showText { Text("Review pending").foregroundStyle(.secondary) }
+    }
+    .font(.caption2)
+    .help("Review pending")
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("Review pending")
   }
 }
 
@@ -351,13 +370,11 @@ private struct StatusLabel: View {
   let text: String
   let color: Color
   let showText: Bool
-  var iconScale: CGFloat = 1
 
   var body: some View {
     HStack(spacing: 4) {
       OcticonImage(icon: icon, size: 11)
         .foregroundStyle(color)
-        .scaleEffect(iconScale)
       if showText { Text(text).foregroundStyle(.secondary) }
     }
     .font(.caption2)

@@ -25,6 +25,9 @@ struct PullRequest: Codable, Identifiable, Hashable {
   let deletions: Int
   let labels: [String]
   let requestedReviewers: [String]
+  let viewerReviewState: String?
+  let viewerReviewedHeadOID: String?
+  let viewerReviewSubmittedAt: Date?
   let stackPosition: Int?
   let stackSize: Int?
 
@@ -34,6 +37,21 @@ struct PullRequest: Codable, Identifiable, Hashable {
 
   func isDismissed(by revisions: [String: String]) -> Bool {
     revisions[id] == revisionKey
+  }
+
+  func isHiddenAfterApproval(using preferences: Preferences) -> Bool {
+    guard preferences.removePullRequestsAfterApproval, viewerReviewState == "APPROVED" else {
+      return false
+    }
+    let changedSinceApproval =
+      viewerReviewedHeadOID.map { $0 != headRefOID } ?? false
+    let reviewWasRerequested =
+      reviewRequestedAt.map { requestDate in
+        viewerReviewSubmittedAt.map { requestDate > $0 } ?? false
+      } ?? false
+    if changedSinceApproval && preferences.showChangedPullRequestsAfterApproval { return false }
+    if reviewWasRerequested && preferences.showRerequestedPullRequestsAfterApproval { return false }
+    return true
   }
 
   var attention: PRAttention {
@@ -70,6 +88,23 @@ struct PRSection: Codable, Identifiable, Hashable {
     self.name = name
     self.query = query
     self.isCollapsed = isCollapsed
+  }
+
+  private enum CodingKeys: String, CodingKey { case id, name, query, isCollapsed }
+
+  init(from decoder: Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    id = try values.decode(UUID.self, forKey: .id)
+    name = try values.decode(String.self, forKey: .name)
+    query = try values.decode(String.self, forKey: .query)
+    isCollapsed = false
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var values = encoder.container(keyedBy: CodingKeys.self)
+    try values.encode(id, forKey: .id)
+    try values.encode(name, forKey: .name)
+    try values.encode(query, forKey: .query)
   }
 
   static let defaults: [PRSection] = [
@@ -131,6 +166,12 @@ enum TimeDisplayMode: String, Codable, CaseIterable, Identifiable {
 }
 
 struct Preferences: Codable {
+  struct ApprovalCachePolicy: Equatable {
+    let removesApproved: Bool
+    let showsChanged: Bool
+    let showsRerequested: Bool
+  }
+
   var refreshInterval: TimeInterval = 60
   var panelLevel: PanelLevel = .floating
   var openPanelAtLaunch = true
@@ -144,16 +185,28 @@ struct Preferences: Codable {
   var statusDisplayMode: StatusDisplayMode = .compactIcons
   var timeDisplayMode: TimeDisplayMode = .created
   var commandClickDismisses = true
+  var removePullRequestsAfterApproval = true
+  var showChangedPullRequestsAfterApproval = true
+  var showRerequestedPullRequestsAfterApproval = true
   var notificationsEnabled = true
   var excludedRepositories: Set<String> = []
   var dismissedRevisions: [String: String] = [:]
 
   static let `default` = Preferences()
 
+  var approvalCachePolicy: ApprovalCachePolicy {
+    ApprovalCachePolicy(
+      removesApproved: removePullRequestsAfterApproval,
+      showsChanged: showChangedPullRequestsAfterApproval,
+      showsRerequested: showRerequestedPullRequestsAfterApproval)
+  }
+
   private enum CodingKeys: String, CodingKey {
     case refreshInterval, panelLevel, openPanelAtLaunch, openAtLogin, sections
     case menuBarCountMode, showAuthor, showUpdatedAt, showCheckStatus, showReviewStatus
     case statusDisplayMode, timeDisplayMode, commandClickDismisses, notificationsEnabled
+    case removePullRequestsAfterApproval, showChangedPullRequestsAfterApproval
+    case showRerequestedPullRequestsAfterApproval
     case excludedRepositories, mutedNotificationRepositories
     case dismissedRevisions
   }
@@ -181,6 +234,13 @@ struct Preferences: Codable {
       try values.decodeIfPresent(TimeDisplayMode.self, forKey: .timeDisplayMode) ?? .created
     commandClickDismisses =
       try values.decodeIfPresent(Bool.self, forKey: .commandClickDismisses) ?? true
+    removePullRequestsAfterApproval =
+      try values.decodeIfPresent(Bool.self, forKey: .removePullRequestsAfterApproval) ?? true
+    showChangedPullRequestsAfterApproval =
+      try values.decodeIfPresent(Bool.self, forKey: .showChangedPullRequestsAfterApproval) ?? true
+    showRerequestedPullRequestsAfterApproval =
+      try values.decodeIfPresent(Bool.self, forKey: .showRerequestedPullRequestsAfterApproval)
+      ?? true
     notificationsEnabled =
       try values.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? true
     excludedRepositories =
@@ -206,6 +266,11 @@ struct Preferences: Codable {
     try values.encode(statusDisplayMode, forKey: .statusDisplayMode)
     try values.encode(timeDisplayMode, forKey: .timeDisplayMode)
     try values.encode(commandClickDismisses, forKey: .commandClickDismisses)
+    try values.encode(removePullRequestsAfterApproval, forKey: .removePullRequestsAfterApproval)
+    try values.encode(
+      showChangedPullRequestsAfterApproval, forKey: .showChangedPullRequestsAfterApproval)
+    try values.encode(
+      showRerequestedPullRequestsAfterApproval, forKey: .showRerequestedPullRequestsAfterApproval)
     try values.encode(notificationsEnabled, forKey: .notificationsEnabled)
     try values.encode(excludedRepositories, forKey: .excludedRepositories)
     try values.encode(dismissedRevisions, forKey: .dismissedRevisions)

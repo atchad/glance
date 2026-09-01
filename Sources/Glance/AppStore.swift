@@ -20,7 +20,12 @@ final class AppStore: ObservableObject {
   @Published private(set) var accessibleRepositories: [String] = []
   @Published private(set) var isLoadingRepositories = false
   @Published private(set) var repositoryLoadError: String?
-  @Published var preferences: Preferences { didSet { savePreferences() } }
+  @Published var preferences: Preferences {
+    didSet {
+      savePreferences()
+      if oldValue.approvalCachePolicy != preferences.approvalCachePolicy { saveCache() }
+    }
+  }
 
   private let client = GitHubClient()
   private let notificationManager = NotificationManager()
@@ -42,6 +47,9 @@ final class AppStore: ObservableObject {
       "is:pr is:open archived:false author:@me review:approved status:success -is:draft",
     ]
     loaded.sections.removeAll { retiredQueries.contains($0.query) }
+    for index in loaded.sections.indices {
+      loaded.sections[index].isCollapsed = false
+    }
     preferences = loaded
     if let cache = Self.load(GlanceCache.self, from: Self.cacheURL) {
       let cachedSnapshots = Dictionary(
@@ -185,6 +193,7 @@ final class AppStore: ObservableObject {
     (snapshots[section.id] ?? []).filter {
       !preferences.excludedRepositories.contains($0.repository)
         && !$0.isDismissed(by: preferences.dismissedRevisions)
+        && !$0.isHiddenAfterApproval(using: preferences)
     }
   }
 
@@ -298,7 +307,11 @@ final class AppStore: ObservableObject {
     let cache = GlanceCache(
       savedAt: lastUpdated ?? Date(), viewerLogin: viewerLogin,
       snapshots: preferences.sections.map {
-        SectionSnapshot(id: $0.id, pullRequests: snapshots[$0.id] ?? [])
+        SectionSnapshot(
+          id: $0.id,
+          pullRequests: (snapshots[$0.id] ?? []).filter {
+            !$0.isHiddenAfterApproval(using: preferences)
+          })
       }
     )
     Self.save(cache, to: Self.cacheURL)

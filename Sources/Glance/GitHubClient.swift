@@ -180,6 +180,14 @@ struct GitHubClient {
                   }
                 }
               }
+              reviews(last: 50) {
+                nodes {
+                  author { login }
+                  state
+                  submittedAt
+                  commit { oid }
+                }
+              }
               timelineItems(last: 50, itemTypes: [REVIEW_REQUESTED_EVENT]) {
                 nodes {
                   ... on ReviewRequestedEvent {
@@ -326,7 +334,7 @@ private struct RawPullRequest: Decodable {
   struct Repository: Decodable { let nameWithOwner: String }
   struct LabelConnection: Decodable { let nodes: [Label] }
   struct Label: Decodable { let name: String }
-  struct ReviewConnection: Decodable { let nodes: [ReviewNode] }
+  struct ReviewRequestConnection: Decodable { let nodes: [ReviewNode] }
   struct ReviewNode: Decodable { let requestedReviewer: Reviewer? }
   struct Reviewer: Decodable {
     let login: String?
@@ -337,6 +345,14 @@ private struct RawPullRequest: Decodable {
     let createdAt: Date
     let requestedReviewer: Reviewer?
   }
+  struct ReviewConnection: Decodable { let nodes: [Review] }
+  struct Review: Decodable {
+    let author: Author?
+    let state: String
+    let submittedAt: Date?
+    let commit: ReviewCommit?
+  }
+  struct ReviewCommit: Decodable { let oid: String }
   struct CommitConnection: Decodable { let nodes: [CommitNode] }
   struct CommitNode: Decodable { let commit: Commit }
   struct Commit: Decodable { let statusCheckRollup: Rollup? }
@@ -361,7 +377,8 @@ private struct RawPullRequest: Decodable {
   let author: Author?
   let repository: Repository
   let labels: LabelConnection
-  let reviewRequests: ReviewConnection
+  let reviewRequests: ReviewRequestConnection
+  let reviews: ReviewConnection
   let timelineItems: ReviewEventConnection
   let commits: CommitConnection
 
@@ -378,6 +395,10 @@ private struct RawPullRequest: Decodable {
     let matchingRequest =
       timelineItems.nodes.last(where: { $0.requestedReviewer?.login == viewer })
       ?? timelineItems.nodes.last
+    let viewerReview = reviews.nodes.last {
+      $0.author?.login == viewer
+        && ($0.state == "APPROVED" || $0.state == "CHANGES_REQUESTED" || $0.state == "DISMISSED")
+    }
     return PullRequest(
       id: id, number: number, repository: repository.nameWithOwner,
       title: title, author: author?.login ?? "ghost", authorAvatarURL: author?.avatarUrl,
@@ -388,6 +409,9 @@ private struct RawPullRequest: Decodable {
       requestedReviewers: reviewRequests.nodes.compactMap {
         $0.requestedReviewer?.login ?? $0.requestedReviewer?.name
       },
+      viewerReviewState: viewerReview?.state == "DISMISSED" ? "APPROVED" : viewerReview?.state,
+      viewerReviewedHeadOID: viewerReview?.commit?.oid,
+      viewerReviewSubmittedAt: viewerReview?.submittedAt,
       stackPosition: stackEntry?.position, stackSize: stack?.size
     )
   }

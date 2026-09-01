@@ -23,7 +23,8 @@ final class StatusItemController: NSObject, ObservableObject {
     popover.contentViewController = NSHostingController(
       rootView: DashboardView(
         store: store, surface: .menuBar, togglePanel: panel.toggle,
-        openSettings: settingsWindow.show)
+        openSettings: { [weak self] in self?.showSettingsFromPopover() },
+        didOpenPullRequest: { [weak self] in self?.popover.performClose(nil) })
     )
 
     if let button = statusItem.button {
@@ -83,6 +84,12 @@ final class StatusItemController: NSObject, ObservableObject {
   }
 
   @objc private func openSettings() {
+    showSettingsFromPopover()
+  }
+
+  private func showSettingsFromPopover() {
+    popover.performClose(nil)
+    panel.hide()
     settingsWindow.show()
   }
 

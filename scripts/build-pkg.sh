@@ -45,7 +45,7 @@ pkgbuild \
   --root "$payload_root" \
   --component-plist "$component_plist" \
   --install-location / \
-  --identifier com.anthonychadwick.glance.pkg \
+  --identifier app.glance.Glance.pkg \
   --version "$app_version" \
   --sign "$installer_identity" \
   --timestamp \

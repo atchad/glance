@@ -1,3 +1,16 @@
 /.build/
 /dist/
 .DS_Store
+
+# Local credentials and signing exports
+.env
+.env.*
+!.env.example
+*.key
+*.p8
+*.p8.base64
+*.p12
+*.p12.base64
+*.pem
+*.mobileprovision
+*.provisionprofile

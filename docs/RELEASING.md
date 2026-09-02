@@ -14,28 +14,56 @@ Create a protected GitHub environment named `release`. Require approval for depl
 - `APP_STORE_CONNECT_KEY_ID`
 - `APP_STORE_CONNECT_ISSUER_ID`
 
-Export the Developer ID Application identity and Developer ID Installer identity, including each private key, from Keychain Access as separate password-protected `.p12` files. Encode each file and send the encoded value directly to GitHub Secrets:
+Create a private temporary directory outside the repository and open it in Finder:
 
 ```sh
-base64 -i DeveloperIDApplication.p12 -o DeveloperIDApplication.p12.base64
-gh secret set DEVELOPER_ID_APPLICATION_P12_BASE64 --env release < DeveloperIDApplication.p12.base64
+credential_export_dir="$(mktemp -d -t glance-signing)"
+chmod 700 "$credential_export_dir"
+open "$credential_export_dir"
+```
+
+From Keychain Access, export the Developer ID Application identity and Developer ID Installer identity, including each private key, into that folder as `DeveloperIDApplication.p12` and `DeveloperIDInstaller.p12`. Protect each export with a different strong password. Encode the files and send the encoded values directly to GitHub Secrets:
+
+```sh
+base64 -i "$credential_export_dir/DeveloperIDApplication.p12" \
+  -o "$credential_export_dir/DeveloperIDApplication.p12.base64"
+gh secret set DEVELOPER_ID_APPLICATION_P12_BASE64 --env release \
+  < "$credential_export_dir/DeveloperIDApplication.p12.base64"
 gh secret set DEVELOPER_ID_APPLICATION_P12_PASSWORD --env release
 
-base64 -i DeveloperIDInstaller.p12 -o DeveloperIDInstaller.p12.base64
-gh secret set DEVELOPER_ID_INSTALLER_P12_BASE64 --env release < DeveloperIDInstaller.p12.base64
+base64 -i "$credential_export_dir/DeveloperIDInstaller.p12" \
+  -o "$credential_export_dir/DeveloperIDInstaller.p12.base64"
+gh secret set DEVELOPER_ID_INSTALLER_P12_BASE64 --env release \
+  < "$credential_export_dir/DeveloperIDInstaller.p12.base64"
 gh secret set DEVELOPER_ID_INSTALLER_P12_PASSWORD --env release
 ```
 
-Create a team App Store Connect API key with the minimum role that can submit software for notarization. Download its `.p8` file once, then store it and its identifiers:
+Create a team App Store Connect API key with the minimum role that can submit software for notarization. Download its `.p8` file once and move it into the temporary directory as `AuthKey_KEY_ID.p8`, replacing `KEY_ID` with the key’s identifier. Then store it and its identifiers:
 
 ```sh
-base64 -i AuthKey_KEY_ID.p8 -o AuthKey_KEY_ID.p8.base64
-gh secret set APP_STORE_CONNECT_KEY_BASE64 --env release < AuthKey_KEY_ID.p8.base64
+base64 -i "$credential_export_dir/AuthKey_KEY_ID.p8" \
+  -o "$credential_export_dir/AuthKey_KEY_ID.p8.base64"
+gh secret set APP_STORE_CONNECT_KEY_BASE64 --env release \
+  < "$credential_export_dir/AuthKey_KEY_ID.p8.base64"
 gh secret set APP_STORE_CONNECT_KEY_ID --env release
 gh secret set APP_STORE_CONNECT_ISSUER_ID --env release
 ```
 
-Delete local exported credential files after confirming the workflow can sign a release. Base64 is encoding, not encryption; GitHub Secrets provides storage protection.
+After confirming the workflow can sign a release, delete the four certificate files and both API-key files, remove the temporary directory, and clear its shell variable:
+
+```sh
+rm -f \
+  "$credential_export_dir/DeveloperIDApplication.p12" \
+  "$credential_export_dir/DeveloperIDApplication.p12.base64" \
+  "$credential_export_dir/DeveloperIDInstaller.p12" \
+  "$credential_export_dir/DeveloperIDInstaller.p12.base64" \
+  "$credential_export_dir/AuthKey_KEY_ID.p8" \
+  "$credential_export_dir/AuthKey_KEY_ID.p8.base64"
+rmdir "$credential_export_dir"
+unset credential_export_dir
+```
+
+Base64 is encoding, not encryption; GitHub Secrets provides storage protection.
 
 In the repository release settings, enable immutable releases when available. This locks a published tag and its assets and adds a release attestation.
 

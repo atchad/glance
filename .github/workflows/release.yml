@@ -26,10 +26,25 @@ jobs:
 
       - name: Validate release tag and source version
         shell: zsh {0}
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
           if [[ ! "$GITHUB_REF_NAME" =~ '^v[0-9]+\.[0-9]+\.[0-9]+$' ]]; then
             print -u2 "Release tags must use vMAJOR.MINOR.PATCH."
+            exit 1
+          fi
+          if [[ "$(git cat-file -t "refs/tags/$GITHUB_REF_NAME")" != "tag" ]]; then
+            print -u2 "Release tags must be annotated."
+            exit 1
+          fi
+          default_branch_ref="refs/remotes/origin/$DEFAULT_BRANCH"
+          if ! git show-ref --verify --quiet "$default_branch_ref"; then
+            print -u2 "Default branch ref $default_branch_ref is unavailable."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "$default_branch_ref"; then
+            print -u2 "Release commit $GITHUB_SHA is not on $DEFAULT_BRANCH."
             exit 1
           fi
           source_version="$(plutil -extract CFBundleShortVersionString raw support/Info.plist)"
@@ -60,6 +75,7 @@ jobs:
           keychain_password="$(openssl rand -hex 32)"
           application_p12="$RUNNER_TEMP/developer-id-application.p12"
           installer_p12="$RUNNER_TEMP/developer-id-installer.p12"
+          trap 'rm -f "$application_p12" "$installer_p12"' EXIT
 
           umask 077
           printf '%s' "$APPLICATION_CERTIFICATE" | base64 --decode > "$application_p12"
@@ -126,9 +142,12 @@ jobs:
             --generate-notes \
             --title "Glance ${GITHUB_REF_NAME#v}"
 
-      - name: Remove temporary signing keychain
+      - name: Remove temporary signing material
         if: always()
         run: |
+          if [[ -n "${GLANCE_NOTARY_KEY:-}" && -f "$GLANCE_NOTARY_KEY" ]]; then
+            rm -f "$GLANCE_NOTARY_KEY"
+          fi
           if [[ -n "${GLANCE_CI_KEYCHAIN:-}" && -f "$GLANCE_CI_KEYCHAIN" ]]; then
             security delete-keychain "$GLANCE_CI_KEYCHAIN"
           fi

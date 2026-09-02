@@ -87,7 +87,7 @@ In the repository release settings, enable immutable releases when available. Th
 ## Publish a release
 
 1. Update `CFBundleShortVersionString` and increment the integer `CFBundleVersion` in `support/Info.plist`.
-2. Merge the tested change to `main` and wait for CI to pass.
+2. Merge the change after its required pull-request CI passes.
 3. Create and push an annotated tag matching the short version exactly:
 
 ```sh

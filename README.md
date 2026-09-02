@@ -10,6 +10,10 @@
 
 Glance keeps your GitHub pull requests one click away in the menu bar. Open its compact popover for a quick check, or detach it into an always-on-top panel while you work.
 
+<p align="center">
+  <img src="docs/images/glance-panel.png" width="360" alt="Glance showing pull requests that need attention">
+</p>
+
 ## What Glance does
 
 - Shows review requests, pull requests you opened, and any other sections you define with GitHub search queries.
@@ -73,7 +77,7 @@ Excluding a repository removes its pull requests from the live queue and local c
 Building Glance requires macOS 14 or later and Xcode 16 or later.
 
 ```sh
-git clone git@github.com:atchad/glance.git
+git clone https://github.com/atchad/glance.git
 cd glance
 swift run Glance
 ```
@@ -96,3 +100,5 @@ Without a Developer ID certificate in your Keychain, local artifacts receive an 
 ## Acknowledgments
 
 GitHub interface glyphs are from [Primer Octicons](https://github.com/primer/octicons) and are distributed under the MIT License. The packaged license is included in [`Sources/Glance/Resources/Octicons/LICENSE`](Sources/Glance/Resources/Octicons/LICENSE).
+
+Glance itself is available under the [MIT License](LICENSE).

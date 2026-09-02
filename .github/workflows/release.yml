@@ -64,7 +64,7 @@ jobs:
           )"
           if [[ -n "$previous_tag" ]]; then
             previous_info="$RUNNER_TEMP/previous-Info.plist"
-            git show "$previous_tag:support/Info.plist" > "$previous_info"
+            git show "${previous_tag}:support/Info.plist" > "$previous_info"
             previous_build="$(plutil -extract CFBundleVersion raw "$previous_info")"
             if (( source_build <= previous_build )); then
               print -u2 "CFBundleVersion $source_build must exceed $previous_build from $previous_tag."

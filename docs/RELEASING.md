@@ -13,6 +13,7 @@ Create a protected GitHub environment named `release`. Require approval for depl
 - `APP_STORE_CONNECT_KEY_BASE64`
 - `APP_STORE_CONNECT_KEY_ID`
 - `APP_STORE_CONNECT_ISSUER_ID`
+- `SPARKLE_EDDSA_PRIVATE_KEY`
 
 Create a private temporary directory outside the repository and open it in Finder:
 
@@ -65,11 +66,27 @@ unset credential_export_dir
 
 Base64 is encoding, not encryption; GitHub Secrets provides storage protection.
 
+Generate the Sparkle EdDSA key once with the version of `generate_keys` resolved by Swift Package Manager. The private key remains in the login Keychain under the account `app.glance.Glance`; add its exported value to the `release` environment:
+
+```sh
+swift package resolve
+sparkle_tools=".build/artifacts/sparkle/Sparkle/bin"
+"$sparkle_tools/generate_keys" --account app.glance.Glance
+private_key_file="$(mktemp -u -t glance-sparkle-key)"
+"$sparkle_tools/generate_keys" --account app.glance.Glance -x "$private_key_file"
+chmod 600 "$private_key_file"
+gh secret set SPARKLE_EDDSA_PRIVATE_KEY --env release < "$private_key_file"
+unlink "$private_key_file"
+unset private_key_file sparkle_tools
+```
+
+The command prints the public key that belongs in `SUPublicEDKey` in `support/Info.plist`. Keep an encrypted backup of the private key outside the repository. Losing both the Keychain item and the backup prevents signing future automatic updates with this key.
+
 In the repository release settings, enable immutable releases when available. This locks a published tag and its assets and adds a release attestation.
 
 ## Publish a release
 
-1. Update `CFBundleShortVersionString` and `CFBundleVersion` in `support/Info.plist`.
+1. Update `CFBundleShortVersionString` and increment the integer `CFBundleVersion` in `support/Info.plist`.
 2. Merge the tested change to `main` and wait for CI to pass.
 3. Create and push an annotated tag matching the short version exactly:
 
@@ -79,10 +96,10 @@ git tag -a "v$release_version" -m "Glance $release_version"
 git push origin "v$release_version"
 ```
 
-The workflow creates the release only after every signing, notarization, and verification step succeeds. The latest DMG is available at:
+The workflow creates the release only after every signing, notarization, appcast generation, and verification step succeeds. The signed appcast is published as an immutable release asset at a stable URL that installed copies of Glance check automatically. The latest DMG is available at:
 
 ```text
 https://github.com/atchad/glance/releases/latest/download/Glance.dmg
 ```
 
-Published release assets are available directly from the public repository. Each release also includes a signed PKG and `SHA256SUMS.txt` for independent verification.
+Published release assets are available directly from the public repository. The repository must be public before shipping the first Sparkle-enabled release so installed apps can fetch the appcast without GitHub authentication. Each release also includes a signed PKG, signed `appcast.xml`, and `SHA256SUMS.txt` for independent verification.

@@ -52,6 +52,25 @@ jobs:
             print -u2 "Tag $GITHUB_REF_NAME does not match app version $source_version."
             exit 1
           fi
+          source_build="$(plutil -extract CFBundleVersion raw support/Info.plist)"
+          if [[ ! "$source_build" =~ '^[0-9]+$' ]]; then
+            print -u2 "CFBundleVersion must be a positive integer."
+            exit 1
+          fi
+          previous_tag="$(
+            git tag --merged "$default_branch_ref" --sort=-version:refname \
+              | awk -v current="$GITHUB_REF_NAME" \
+                '$0 ~ /^v[0-9]+\.[0-9]+\.[0-9]+$/ && $0 != current { print; exit }'
+          )"
+          if [[ -n "$previous_tag" ]]; then
+            previous_info="$RUNNER_TEMP/previous-Info.plist"
+            git show "$previous_tag:support/Info.plist" > "$previous_info"
+            previous_build="$(plutil -extract CFBundleVersion raw "$previous_info")"
+            if (( source_build <= previous_build )); then
+              print -u2 "CFBundleVersion $source_build must exceed $previous_build from $previous_tag."
+              exit 1
+            fi
+          fi
           zsh -n scripts/*.sh
 
       - name: Run tests
@@ -119,6 +138,13 @@ jobs:
           ./scripts/build-dmg.sh
           ./scripts/build-pkg.sh
 
+      - name: Generate signed update feed
+        env:
+          SPARKLE_EDDSA_PRIVATE_KEY: ${{ secrets.SPARKLE_EDDSA_PRIVATE_KEY }}
+        run: |
+          : "${SPARKLE_EDDSA_PRIVATE_KEY:?Missing Sparkle signing key secret}"
+          ./scripts/generate-appcast.sh
+
       - name: Verify release artifacts
         run: |
           codesign --verify --deep --strict --verbose=2 dist/Glance.app
@@ -128,7 +154,10 @@ jobs:
           spctl --assess --type execute --verbose=4 dist/Glance.app
           spctl --assess --type open --context context:primary-signature --verbose=4 dist/Glance.dmg
           spctl --assess --type install --verbose=4 dist/Glance.pkg
-          (cd dist && shasum -a 256 Glance.dmg Glance.pkg > SHA256SUMS.txt)
+          xmllint --noout dist/appcast.xml
+          grep -q 'sparkle:edSignature=' dist/appcast.xml
+          grep -q 'sparkle-signatures:' dist/appcast.xml
+          (cd dist && shasum -a 256 Glance.dmg Glance.pkg appcast.xml > SHA256SUMS.txt)
 
       - name: Publish immutable release assets
         env:
@@ -137,6 +166,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             dist/Glance.dmg \
             dist/Glance.pkg \
+            dist/appcast.xml \
             dist/SHA256SUMS.txt \
             --verify-tag \
             --generate-notes \

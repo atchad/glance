@@ -23,7 +23,13 @@ jobs:
           persist-credentials: false
 
       - name: Validate scripts
-        run: zsh -n scripts/*.sh
+        run: |
+          zsh -n scripts/*.sh
+          plutil -lint support/Info.plist
+          test "$(plutil -extract SUFeedURL raw support/Info.plist)" = \
+            'https://github.com/atchad/glance/releases/latest/download/appcast.xml'
+          test -n "$(plutil -extract SUPublicEDKey raw support/Info.plist)"
+          test "$(plutil -extract SURequireSignedFeed raw support/Info.plist)" = true
 
       - name: Run tests
         run: swift test
@@ -35,3 +41,9 @@ jobs:
         run: |
           codesign --verify --deep --strict --verbose=2 dist/Glance.app
           lipo dist/Glance.app/Contents/MacOS/Glance -verify_arch arm64 x86_64
+          test -d dist/Glance.app/Contents/Frameworks/Sparkle.framework
+          test -f dist/Glance.app/Contents/Resources/Sparkle-LICENSE.txt
+          otool -L dist/Glance.app/Contents/MacOS/Glance \
+            | grep -q '@rpath/Sparkle.framework/Versions/B/Sparkle'
+          otool -l dist/Glance.app/Contents/MacOS/Glance \
+            | grep -q '@executable_path/../Frameworks'

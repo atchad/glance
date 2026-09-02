@@ -14,5 +14,10 @@
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
     <key>NSHumanReadableCopyright</key><string>Copyright © 2026 Anthony Chadwick</string>
+    <key>SUFeedURL</key><string>https://github.com/atchad/glance/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key><string>o/7WsB4dDwsPPZkBuDolb/ITL+ww9Cg+zyB34fDmOjM=</string>
+    <key>SUEnableAutomaticChecks</key><true/>
+    <key>SURequireSignedFeed</key><true/>
+    <key>SUVerifyUpdateBeforeExtraction</key><true/>
 </dict>
 </plist>

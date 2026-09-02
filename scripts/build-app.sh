@@ -19,13 +19,20 @@ binary_path="$(swift build "${build_arguments[@]}" --show-bin-path)/Glance"
 binary_directory="${binary_path:h}"
 app_path="$repo_root/dist/Glance.app"
 contents_path="$app_path/Contents"
+frameworks_path="$contents_path/Frameworks"
+sparkle_framework_source="$binary_directory/Sparkle.framework"
+sparkle_framework="$frameworks_path/Sparkle.framework"
+sparkle_license="$repo_root/.build/artifacts/sparkle/Sparkle/LICENSE"
 
 rm -rf "$app_path"
-mkdir -p "$contents_path/MacOS" "$contents_path/Resources"
+mkdir -p "$contents_path/MacOS" "$contents_path/Resources" "$frameworks_path"
 cp "$binary_path" "$contents_path/MacOS/Glance"
 cp -R "$binary_directory/Glance_Glance.bundle" "$contents_path/Resources/Glance_Glance.bundle"
 cp "$repo_root/support/Info.plist" "$contents_path/Info.plist"
 cp "$repo_root/support/Glance.icns" "$contents_path/Resources/Glance.icns"
+cp "$sparkle_license" "$contents_path/Resources/Sparkle-LICENSE.txt"
+ditto "$sparkle_framework_source" "$sparkle_framework"
+install_name_tool -add_rpath "@executable_path/../Frameworks" "$contents_path/MacOS/Glance"
 
 signing_identity="${GLANCE_SIGNING_IDENTITY:-}"
 if [[ -z "$signing_identity" ]]; then
@@ -34,11 +41,23 @@ if [[ -z "$signing_identity" ]]; then
         | head -n 1)"
 fi
 
-if [[ -n "$signing_identity" ]]; then
-    codesign --force --deep --options runtime --timestamp --sign "$signing_identity" "$app_path"
-else
+if [[ -z "$signing_identity" ]]; then
     print -u2 "No Developer ID Application identity found; using an ad-hoc signature."
-    codesign --force --deep --sign - "$app_path"
+    signing_identity="-"
 fi
+
+signing_arguments=(--force --options runtime --sign "$signing_identity")
+if [[ "$signing_identity" != "-" ]]; then
+    signing_arguments+=(--timestamp)
+fi
+
+codesign "${signing_arguments[@]}" \
+    "$sparkle_framework/Versions/B/XPCServices/Installer.xpc"
+codesign "${signing_arguments[@]}" --preserve-metadata=entitlements \
+    "$sparkle_framework/Versions/B/XPCServices/Downloader.xpc"
+codesign "${signing_arguments[@]}" "$sparkle_framework/Versions/B/Autoupdate"
+codesign "${signing_arguments[@]}" "$sparkle_framework/Versions/B/Updater.app"
+codesign "${signing_arguments[@]}" "$sparkle_framework"
+codesign "${signing_arguments[@]}" "$app_path"
 
 echo "$app_path"

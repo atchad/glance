@@ -113,6 +113,11 @@ private struct GeneralSettingsPage: View {
         }
         Toggle("Open the panel when Glance starts", isOn: $store.preferences.openPanelAtLaunch)
       }
+      Section("Appearance") {
+        Picker("Appearance", selection: $store.preferences.appearanceMode) {
+          ForEach(AppearanceMode.allCases) { mode in Text(mode.title).tag(mode) }
+        }
+      }
       Section("Window") {
         Toggle(
           "Keep the panel above other windows",
@@ -189,6 +194,9 @@ private struct ReviewSettingsPage: View {
         Toggle(
           "Remove pull requests after I approve them",
           isOn: $store.preferences.removePullRequestsAfterApproval)
+        Toggle(
+          "Remove pull requests after someone else approves them",
+          isOn: $store.preferences.removePullRequestsAfterOtherApproval)
         Toggle(
           "Show again when new changes are pushed",
           isOn: $store.preferences.showChangedPullRequestsAfterApproval

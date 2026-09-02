@@ -23,6 +23,9 @@ final class AppStore: ObservableObject {
   @Published var preferences: Preferences {
     didSet {
       savePreferences()
+      if oldValue.appearanceMode != preferences.appearanceMode {
+        Self.applyAppearance(preferences.appearanceMode)
+      }
       if oldValue.approvalCachePolicy != preferences.approvalCachePolicy { saveCache() }
     }
   }
@@ -51,6 +54,7 @@ final class AppStore: ObservableObject {
       loaded.sections[index].isCollapsed = false
     }
     preferences = loaded
+    Self.applyAppearance(loaded.appearanceMode)
     if let cache = Self.load(GlanceCache.self, from: Self.cacheURL) {
       let cachedSnapshots = Dictionary(
         uniqueKeysWithValues: cache.snapshots.map { ($0.id, $0.pullRequests) })
@@ -142,6 +146,15 @@ final class AppStore: ObservableObject {
     snapshots.mapValues { pullRequests in
       pullRequests.filter { !excluded.contains($0.repository) }
     }
+  }
+
+  static func applyAppearance(_ mode: AppearanceMode) {
+    NSApplication.shared.appearance =
+      switch mode {
+      case .system: nil
+      case .light: NSAppearance(named: .aqua)
+      case .dark: NSAppearance(named: .darkAqua)
+      }
   }
 
   func refresh() {

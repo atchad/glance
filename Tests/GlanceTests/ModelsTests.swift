@@ -44,12 +44,14 @@ final class ModelsTests: XCTestCase {
       """
     let preferences = try JSONDecoder().decode(Preferences.self, from: Data(json.utf8))
     XCTAssertEqual(preferences.menuBarCountMode, .awaitingReview)
+    XCTAssertEqual(preferences.appearanceMode, .system)
     XCTAssertTrue(preferences.showCheckStatus)
     XCTAssertTrue(preferences.showReviewStatus)
     XCTAssertEqual(preferences.statusDisplayMode, .compactIcons)
     XCTAssertEqual(preferences.timeDisplayMode, .created)
     XCTAssertTrue(preferences.commandClickDismisses)
     XCTAssertTrue(preferences.removePullRequestsAfterApproval)
+    XCTAssertFalse(preferences.removePullRequestsAfterOtherApproval)
     XCTAssertTrue(preferences.showChangedPullRequestsAfterApproval)
     XCTAssertTrue(preferences.showRerequestedPullRequestsAfterApproval)
     XCTAssertTrue(preferences.openAtLogin)
@@ -93,6 +95,59 @@ final class ModelsTests: XCTestCase {
     var preferences = Preferences.default
     preferences.removePullRequestsAfterApproval = false
     XCTAssertFalse(pullRequest.isHiddenAfterApproval(using: preferences))
+  }
+
+  func testApprovalBySomeoneElseRemainsVisibleByDefault() {
+    let pullRequest = makePullRequest(hasCurrentApprovalFromOtherReviewer: true)
+    XCTAssertFalse(pullRequest.isHiddenAfterApproval(using: .default))
+  }
+
+  func testApprovalBySomeoneElseCanRemovePullRequestFromCache() {
+    let pullRequest = makePullRequest(hasCurrentApprovalFromOtherReviewer: true)
+    var preferences = Preferences.default
+    preferences.removePullRequestsAfterOtherApproval = true
+    XCTAssertTrue(pullRequest.isHiddenAfterApproval(using: preferences))
+  }
+
+  func testStaleApprovalBySomeoneElseDoesNotRemoveCurrentRevision() {
+    let pullRequest = makePullRequest(hasCurrentApprovalFromOtherReviewer: false)
+    var preferences = Preferences.default
+    preferences.removePullRequestsAfterOtherApproval = true
+    XCTAssertFalse(pullRequest.isHiddenAfterApproval(using: preferences))
+  }
+
+  func testOtherReviewerApprovalMustBeCurrentAndEffective() {
+    let reviews = [
+      PullRequest.ReviewSummary(author: "viewer", state: "APPROVED", headOID: "current"),
+      PullRequest.ReviewSummary(author: "alice", state: "APPROVED", headOID: "old"),
+      PullRequest.ReviewSummary(author: "bob", state: "APPROVED", headOID: "current"),
+      PullRequest.ReviewSummary(
+        author: "BOB", state: "CHANGES_REQUESTED", headOID: "current"),
+      PullRequest.ReviewSummary(author: "carol", state: "COMMENTED", headOID: "current"),
+    ]
+
+    XCTAssertFalse(
+      PullRequest.hasCurrentApprovalFromOtherReviewer(
+        in: reviews, viewer: "VIEWER", headOID: "current"))
+    XCTAssertTrue(
+      PullRequest.hasCurrentApprovalFromOtherReviewer(
+        in: reviews
+          + [
+            PullRequest.ReviewSummary(
+              author: "dave", state: "APPROVED", headOID: "current")
+          ],
+        viewer: "viewer", headOID: "current"))
+  }
+
+  func testOlderCachedPullRequestsRemainDecodable() throws {
+    let encoded = try JSONEncoder().encode(makePullRequest())
+    var json = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    json.removeValue(forKey: "hasCurrentApprovalFromOtherReviewer")
+
+    let migrated = try JSONDecoder().decode(
+      PullRequest.self, from: JSONSerialization.data(withJSONObject: json))
+
+    XCTAssertNil(migrated.hasCurrentApprovalFromOtherReviewer)
   }
 
   func testChangedPullRequestReturnsAfterApprovalWhenEnabled() {
@@ -196,7 +251,8 @@ final class ModelsTests: XCTestCase {
     reviewRequestedAt: Date? = nil,
     viewerReviewState: String? = nil,
     viewerReviewedHeadOID: String? = nil,
-    viewerReviewSubmittedAt: Date? = nil
+    viewerReviewSubmittedAt: Date? = nil,
+    hasCurrentApprovalFromOtherReviewer: Bool = false
   ) -> PullRequest {
     PullRequest(
       id: id, number: 1, repository: repository, title: "Test", author: "author",
@@ -207,8 +263,9 @@ final class ModelsTests: XCTestCase {
       checksState: checks,
       additions: 1, deletions: 0, labels: [], requestedReviewers: reviewers,
       viewerReviewState: viewerReviewState, viewerReviewedHeadOID: viewerReviewedHeadOID,
-      viewerReviewSubmittedAt: viewerReviewSubmittedAt, stackPosition: nil,
-      stackSize: nil
+      viewerReviewSubmittedAt: viewerReviewSubmittedAt,
+      hasCurrentApprovalFromOtherReviewer: hasCurrentApprovalFromOtherReviewer,
+      stackPosition: nil, stackSize: nil
     )
   }
 }

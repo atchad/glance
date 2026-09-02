@@ -180,7 +180,7 @@ struct GitHubClient {
                   }
                 }
               }
-              reviews(last: 50) {
+              reviews(last: 100) {
                 nodes {
                   author { login }
                   state
@@ -399,6 +399,13 @@ private struct RawPullRequest: Decodable {
       $0.author?.login == viewer
         && ($0.state == "APPROVED" || $0.state == "CHANGES_REQUESTED" || $0.state == "DISMISSED")
     }
+    let hasCurrentApprovalFromOtherReviewer = PullRequest.hasCurrentApprovalFromOtherReviewer(
+      in: reviews.nodes.map {
+        PullRequest.ReviewSummary(
+          author: $0.author?.login, state: $0.state, headOID: $0.commit?.oid)
+      },
+      viewer: viewer,
+      headOID: headRefOid)
     return PullRequest(
       id: id, number: number, repository: repository.nameWithOwner,
       title: title, author: author?.login ?? "ghost", authorAvatarURL: author?.avatarUrl,
@@ -412,6 +419,7 @@ private struct RawPullRequest: Decodable {
       viewerReviewState: viewerReview?.state == "DISMISSED" ? "APPROVED" : viewerReview?.state,
       viewerReviewedHeadOID: viewerReview?.commit?.oid,
       viewerReviewSubmittedAt: viewerReview?.submittedAt,
+      hasCurrentApprovalFromOtherReviewer: hasCurrentApprovalFromOtherReviewer,
       stackPosition: stackEntry?.position, stackSize: stack?.size
     )
   }

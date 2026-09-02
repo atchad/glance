@@ -2,6 +2,12 @@ import Foundation
 import SwiftUI
 
 struct PullRequest: Codable, Identifiable, Hashable {
+  struct ReviewSummary {
+    let author: String?
+    let state: String
+    let headOID: String?
+  }
+
   enum CheckState: String, Codable {
     case success, failure, pending, neutral, unknown
   }
@@ -28,6 +34,7 @@ struct PullRequest: Codable, Identifiable, Hashable {
   let viewerReviewState: String?
   let viewerReviewedHeadOID: String?
   let viewerReviewSubmittedAt: Date?
+  let hasCurrentApprovalFromOtherReviewer: Bool?
   let stackPosition: Int?
   let stackSize: Int?
 
@@ -39,7 +46,29 @@ struct PullRequest: Codable, Identifiable, Hashable {
     revisions[id] == revisionKey
   }
 
+  static func hasCurrentApprovalFromOtherReviewer(
+    in reviews: [ReviewSummary], viewer: String, headOID: String
+  ) -> Bool {
+    var latestOtherReviews: [String: ReviewSummary] = [:]
+    for review in reviews {
+      guard let author = review.author,
+        author.caseInsensitiveCompare(viewer) != .orderedSame,
+        review.state == "APPROVED" || review.state == "CHANGES_REQUESTED"
+          || review.state == "DISMISSED"
+      else { continue }
+      latestOtherReviews[author.lowercased()] = review
+    }
+    return latestOtherReviews.values.contains {
+      $0.state == "APPROVED" && $0.headOID == headOID
+    }
+  }
+
   func isHiddenAfterApproval(using preferences: Preferences) -> Bool {
+    if preferences.removePullRequestsAfterOtherApproval,
+      hasCurrentApprovalFromOtherReviewer == true
+    {
+      return true
+    }
     guard preferences.removePullRequestsAfterApproval, viewerReviewState == "APPROVED" else {
       return false
     }
@@ -132,6 +161,21 @@ enum PanelLevel: String, Codable, CaseIterable, Identifiable {
   var title: String { self == .floating ? "Always on Top" : "Normal Window" }
 }
 
+enum AppearanceMode: String, Codable, CaseIterable, Identifiable {
+  case system
+  case light
+  case dark
+
+  var id: String { rawValue }
+  var title: String {
+    switch self {
+    case .system: "System"
+    case .light: "Light"
+    case .dark: "Dark"
+    }
+  }
+}
+
 enum MenuBarCountMode: String, Codable, CaseIterable, Identifiable {
   case none
   case awaitingReview
@@ -168,11 +212,13 @@ enum TimeDisplayMode: String, Codable, CaseIterable, Identifiable {
 struct Preferences: Codable {
   struct ApprovalCachePolicy: Equatable {
     let removesApproved: Bool
+    let removesApprovedByOthers: Bool
     let showsChanged: Bool
     let showsRerequested: Bool
   }
 
   var refreshInterval: TimeInterval = 60
+  var appearanceMode: AppearanceMode = .system
   var panelLevel: PanelLevel = .floating
   var openPanelAtLaunch = true
   var openAtLogin = true
@@ -186,6 +232,7 @@ struct Preferences: Codable {
   var timeDisplayMode: TimeDisplayMode = .created
   var commandClickDismisses = true
   var removePullRequestsAfterApproval = true
+  var removePullRequestsAfterOtherApproval = false
   var showChangedPullRequestsAfterApproval = true
   var showRerequestedPullRequestsAfterApproval = true
   var notificationsEnabled = true
@@ -197,15 +244,17 @@ struct Preferences: Codable {
   var approvalCachePolicy: ApprovalCachePolicy {
     ApprovalCachePolicy(
       removesApproved: removePullRequestsAfterApproval,
+      removesApprovedByOthers: removePullRequestsAfterOtherApproval,
       showsChanged: showChangedPullRequestsAfterApproval,
       showsRerequested: showRerequestedPullRequestsAfterApproval)
   }
 
   private enum CodingKeys: String, CodingKey {
-    case refreshInterval, panelLevel, openPanelAtLaunch, openAtLogin, sections
+    case refreshInterval, appearanceMode, panelLevel, openPanelAtLaunch, openAtLogin, sections
     case menuBarCountMode, showAuthor, showUpdatedAt, showCheckStatus, showReviewStatus
     case statusDisplayMode, timeDisplayMode, commandClickDismisses, notificationsEnabled
     case removePullRequestsAfterApproval, showChangedPullRequestsAfterApproval
+    case removePullRequestsAfterOtherApproval
     case showRerequestedPullRequestsAfterApproval
     case excludedRepositories, mutedNotificationRepositories
     case dismissedRevisions
@@ -216,6 +265,8 @@ struct Preferences: Codable {
   init(from decoder: Decoder) throws {
     let values = try decoder.container(keyedBy: CodingKeys.self)
     refreshInterval = try values.decodeIfPresent(TimeInterval.self, forKey: .refreshInterval) ?? 60
+    appearanceMode =
+      try values.decodeIfPresent(AppearanceMode.self, forKey: .appearanceMode) ?? .system
     panelLevel = try values.decodeIfPresent(PanelLevel.self, forKey: .panelLevel) ?? .floating
     openPanelAtLaunch = try values.decodeIfPresent(Bool.self, forKey: .openPanelAtLaunch) ?? true
     openAtLogin = try values.decodeIfPresent(Bool.self, forKey: .openAtLogin) ?? true
@@ -236,6 +287,8 @@ struct Preferences: Codable {
       try values.decodeIfPresent(Bool.self, forKey: .commandClickDismisses) ?? true
     removePullRequestsAfterApproval =
       try values.decodeIfPresent(Bool.self, forKey: .removePullRequestsAfterApproval) ?? true
+    removePullRequestsAfterOtherApproval =
+      try values.decodeIfPresent(Bool.self, forKey: .removePullRequestsAfterOtherApproval) ?? false
     showChangedPullRequestsAfterApproval =
       try values.decodeIfPresent(Bool.self, forKey: .showChangedPullRequestsAfterApproval) ?? true
     showRerequestedPullRequestsAfterApproval =
@@ -254,6 +307,7 @@ struct Preferences: Codable {
   func encode(to encoder: Encoder) throws {
     var values = encoder.container(keyedBy: CodingKeys.self)
     try values.encode(refreshInterval, forKey: .refreshInterval)
+    try values.encode(appearanceMode, forKey: .appearanceMode)
     try values.encode(panelLevel, forKey: .panelLevel)
     try values.encode(openPanelAtLaunch, forKey: .openPanelAtLaunch)
     try values.encode(openAtLogin, forKey: .openAtLogin)
@@ -267,6 +321,8 @@ struct Preferences: Codable {
     try values.encode(timeDisplayMode, forKey: .timeDisplayMode)
     try values.encode(commandClickDismisses, forKey: .commandClickDismisses)
     try values.encode(removePullRequestsAfterApproval, forKey: .removePullRequestsAfterApproval)
+    try values.encode(
+      removePullRequestsAfterOtherApproval, forKey: .removePullRequestsAfterOtherApproval)
     try values.encode(
       showChangedPullRequestsAfterApproval, forKey: .showChangedPullRequestsAfterApproval)
     try values.encode(

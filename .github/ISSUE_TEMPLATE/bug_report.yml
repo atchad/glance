@@ -1,0 +1,82 @@
+name: Bug report
+description: Report a reproducible problem with Glance.
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Glance. For security vulnerabilities, use the private reporting link in the issue chooser instead of opening a public issue.
+
+  - type: input
+    id: glance-version
+    attributes:
+      label: Glance version
+      description: Find this in Glance settings or on the GitHub release page.
+      placeholder: 0.2.0 (build 11)
+    validations:
+      required: true
+
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+      placeholder: macOS 15.6.1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation method
+      options:
+        - DMG
+        - PKG
+        - Built from source
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the problem and its effect.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Glance
+        2. …
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect Glance to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Logs or screenshots
+      description: Add anything that helps explain the problem. Remove tokens, credentials, repository details, and other personal information first.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: This report does not disclose a security vulnerability.
+          required: true

@@ -149,7 +149,7 @@ final class AppStore: ObservableObject {
   }
 
   static func applyAppearance(_ mode: AppearanceMode) {
-    NSApp.appearance =
+    NSApplication.shared.appearance =
       switch mode {
       case .system: nil
       case .light: NSAppearance(named: .aqua)

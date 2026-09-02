@@ -45,6 +45,11 @@ jobs:
         with:
           persist-credentials: false
 
+      # Resolve and download binary dependencies before CodeQL enables compiler
+      # tracing. Tracing package resolution makes SwiftPM disproportionately slow.
+      - name: Resolve Swift dependencies
+        run: swift package resolve
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         with:

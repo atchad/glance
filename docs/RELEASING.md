@@ -46,14 +46,15 @@ In the repository release settings, enable immutable releases when available. Th
 3. Create and push an annotated tag matching the short version exactly:
 
 ```sh
-git tag -a v0.1.4 -m "Glance 0.1.4"
-git push origin v0.1.4
+release_version="$(plutil -extract CFBundleShortVersionString raw support/Info.plist)"
+git tag -a "v$release_version" -m "Glance $release_version"
+git push origin "v$release_version"
 ```
 
-The workflow creates the release only after every signing, notarization, and verification step succeeds. The latest DMG is available to authenticated repository users at:
+The workflow creates the release only after every signing, notarization, and verification step succeeds. The latest DMG is available at:
 
 ```text
 https://github.com/atchad/glance/releases/latest/download/Glance.dmg
 ```
 
-Because the repository is private, GitHub requires an account with repository access. Distribute the downloaded signed artifact through a separate company-approved channel for users who should not receive source access.
+Published release assets are available directly from the public repository. Each release also includes a signed PKG and `SHA256SUMS.txt` for independent verification.

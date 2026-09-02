@@ -1,7 +1,7 @@
 import SwiftUI
 
 private enum SettingsCategory: String, CaseIterable, Identifiable {
-  case general, reviews, github, sections
+  case general, reviews, github, sections, updates
 
   var id: Self { self }
   var title: String {
@@ -10,6 +10,7 @@ private enum SettingsCategory: String, CaseIterable, Identifiable {
     case .reviews: "Pull Requests"
     case .github: "GitHub"
     case .sections: "Sections"
+    case .updates: "Updates"
     }
   }
   var symbol: String {
@@ -18,6 +19,7 @@ private enum SettingsCategory: String, CaseIterable, Identifiable {
     case .reviews: "arrow.triangle.branch"
     case .github: "chevron.left.forwardslash.chevron.right"
     case .sections: "list.bullet.rectangle"
+    case .updates: "arrow.triangle.2.circlepath"
     }
   }
   var color: Color {
@@ -26,6 +28,7 @@ private enum SettingsCategory: String, CaseIterable, Identifiable {
     case .reviews: Color(nsColor: .systemIndigo)
     case .github: Color(nsColor: .systemBlue)
     case .sections: Color(nsColor: .systemTeal)
+    case .updates: Color(nsColor: .systemGreen)
     }
   }
 }
@@ -62,6 +65,7 @@ private struct SettingsCategoryLabel: View {
 struct GlanceSettingsView: View {
   @ObservedObject var store: AppStore
   @ObservedObject var panel: FloatingPanelController
+  @ObservedObject var updates: UpdateController
   @State private var selection: SettingsCategory = .general
   @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
@@ -88,6 +92,7 @@ struct GlanceSettingsView: View {
     case .reviews: ReviewSettingsPage(store: store)
     case .github: GitHubSettingsPage(store: store)
     case .sections: SectionSettingsView(store: store)
+    case .updates: UpdateSettingsPage(updates: updates)
     }
   }
 }
@@ -124,7 +129,7 @@ private struct GeneralSettingsPage: View {
         }
       }
       Section("Refresh") {
-        Picker("Check for updates", selection: $store.preferences.refreshInterval) {
+        Picker("Refresh pull requests", selection: $store.preferences.refreshInterval) {
           Text("Every 15 seconds").tag(TimeInterval(15))
           Text("Every 30 seconds").tag(TimeInterval(30))
           Text("Every minute").tag(TimeInterval(60))
@@ -134,6 +139,44 @@ private struct GeneralSettingsPage: View {
           Text("Every 15 minutes").tag(TimeInterval(900))
         }
       }
+    }
+  }
+}
+
+private struct UpdateSettingsPage: View {
+  @ObservedObject var updates: UpdateController
+
+  var body: some View {
+    SettingsForm {
+      Section("Software Updates") {
+        Toggle(
+          "Automatically check for updates",
+          isOn: Binding(
+            get: { updates.automaticallyChecksForUpdates },
+            set: { updates.setAutomaticallyChecksForUpdates($0) }))
+        Toggle(
+          "Automatically download and install updates",
+          isOn: Binding(
+            get: { updates.automaticallyDownloadsUpdates },
+            set: { updates.setAutomaticallyDownloadsUpdates($0) })
+        )
+        .disabled(!updates.automaticallyChecksForUpdates)
+        Button("Check Now") { updates.checkForUpdates() }
+          .disabled(!updates.canCheckForUpdates)
+      }
+      Section("Installed Version") {
+        LabeledContent("Version", value: installedVersion)
+      }
+    }
+  }
+
+  private var installedVersion: String {
+    let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+    let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+    switch (version, build) {
+    case (.some(let version), .some(let build)): return "\(version) (\(build))"
+    case (.some(let version), .none): return version
+    default: return "Unknown"
     }
   }
 }

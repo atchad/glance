@@ -7,14 +7,19 @@ final class StatusItemController: NSObject, ObservableObject {
   private let store: AppStore
   private let panel: FloatingPanelController
   private let settingsWindow: SettingsWindowController
+  private let updateController: UpdateController
   private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
   private let popover = NSPopover()
   private var cancellables: Set<AnyCancellable> = []
 
-  init(store: AppStore, panel: FloatingPanelController, settingsWindow: SettingsWindowController) {
+  init(
+    store: AppStore, panel: FloatingPanelController, settingsWindow: SettingsWindowController,
+    updateController: UpdateController
+  ) {
     self.store = store
     self.panel = panel
     self.settingsWindow = settingsWindow
+    self.updateController = updateController
     super.init()
 
     popover.behavior = .transient
@@ -66,6 +71,10 @@ final class StatusItemController: NSObject, ObservableObject {
     let menu = NSMenu()
     menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
       .target = self
+    let updateItem = menu.addItem(
+      withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+    updateItem.target = self
+    updateItem.isEnabled = updateController.canCheckForUpdates
     menu.addItem(.separator())
     menu.addItem(withTitle: "Quit Glance", action: #selector(quit), keyEquivalent: "q").target =
       self
@@ -85,6 +94,10 @@ final class StatusItemController: NSObject, ObservableObject {
 
   @objc private func openSettings() {
     showSettingsFromPopover()
+  }
+
+  @objc private func checkForUpdates() {
+    updateController.checkForUpdates()
   }
 
   private func showSettingsFromPopover() {

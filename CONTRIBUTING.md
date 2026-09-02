@@ -11,7 +11,8 @@ Glance requires macOS 14 or later and Xcode 16 or later.
 ```sh
 git clone https://github.com/atchad/glance.git
 cd glance
-swift run Glance
+./scripts/build-app.sh
+open dist/Glance.app
 ```
 
 Run the same core checks used by CI:

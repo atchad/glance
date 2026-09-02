@@ -23,6 +23,7 @@ Glance keeps your GitHub pull requests one click away in the menu bar. Open its 
 - Lets you choose which repositories appear in the app and can generate notifications.
 - Keeps the last successful results visible when GitHub is temporarily unavailable.
 - Opens at login and refreshes automatically on your preferred schedule.
+- Checks for new Glance releases and can install them automatically.
 
 Command-click a pull request to dismiss its current revision. If a new commit is pushed, the pull request returns automatically.
 
@@ -79,7 +80,8 @@ Building Glance requires macOS 14 or later and Xcode 16 or later.
 ```sh
 git clone https://github.com/atchad/glance.git
 cd glance
-swift run Glance
+./scripts/build-app.sh
+open dist/Glance.app
 ```
 
 Run the test suite with:
@@ -106,3 +108,5 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for developmen
 GitHub interface glyphs are from [Primer Octicons](https://github.com/primer/octicons) and are distributed under the MIT License. The packaged license is included in [`Sources/Glance/Resources/Octicons/LICENSE`](Sources/Glance/Resources/Octicons/LICENSE).
 
 Glance itself is available under the [MIT License](LICENSE).
+
+Automatic updates use [Sparkle](https://sparkle-project.org/), distributed under its included license at `Glance.app/Contents/Resources/Sparkle-LICENSE.txt`.

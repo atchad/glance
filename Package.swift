@@ -8,9 +8,15 @@ let package = Package(
   products: [
     .executable(name: "Glance", targets: ["Glance"])
   ],
+  dependencies: [
+    .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6")
+  ],
   targets: [
     .executableTarget(
       name: "Glance",
+      dependencies: [
+        .product(name: "Sparkle", package: "Sparkle")
+      ],
       path: "Sources/Glance",
       resources: [.process("Resources")],
       swiftSettings: [.swiftLanguageMode(.v5)]

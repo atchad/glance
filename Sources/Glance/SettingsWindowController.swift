@@ -8,12 +8,17 @@ final class SettingsWindowController: NSObject, ObservableObject, NSWindowDelega
 
   private let store: AppStore
   private let panelController: FloatingPanelController
+  private let updateController: UpdateController
   private var window: NSWindow?
   private weak var observedToolbar: NSToolbar?
 
-  init(store: AppStore, panelController: FloatingPanelController) {
+  init(
+    store: AppStore, panelController: FloatingPanelController,
+    updateController: UpdateController
+  ) {
     self.store = store
     self.panelController = panelController
+    self.updateController = updateController
   }
 
   func show() {
@@ -38,7 +43,8 @@ final class SettingsWindowController: NSObject, ObservableObject, NSWindowDelega
     window.setFrameAutosaveName("GlanceSettingsWindow")
     window.isReleasedWhenClosed = false
     window.contentViewController = NSHostingController(
-      rootView: GlanceSettingsView(store: store, panel: panelController)
+      rootView: GlanceSettingsView(
+        store: store, panel: panelController, updates: updateController)
     )
     window.center()
     window.delegate = self

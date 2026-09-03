@@ -323,6 +323,18 @@ private struct PullRequestRow: View {
             Text(displayedDate.ageLabel)
               .help(preferences.timeDisplayMode == .created ? "PR created" : "Review requested")
           }
+          if preferences.showLineChanges {
+            if preferences.showAuthor || preferences.showUpdatedAt { Text("·") }
+            HStack(spacing: 4) {
+              Text(verbatim: "+\(pullRequest.additions)").foregroundStyle(.green)
+              Text(verbatim: "−\(pullRequest.deletions)").foregroundStyle(.red)
+            }
+            .fontDesign(.monospaced)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(
+              "\(pullRequest.additions) additions, \(pullRequest.deletions) deletions")
+            .help("Lines changed")
+          }
           if preferences.statusDisplayMode == .compactIcons {
             Spacer(minLength: 4)
             if preferences.showReviewStatus { reviewLabel(showText: false) }

@@ -74,12 +74,35 @@ final class AppStore: ObservableObject {
   }
 
   var menuBarCount: Int? {
-    switch preferences.menuBarCountMode {
-    case .none: nil
-    case .awaitingReview: needsReviewCount
-    case .openedByMe: count(forQueryContaining: "author:@me")
-    case .allShown: Set(preferences.sections.flatMap { pullRequests(in: $0).map(\.id) }).count
+    Self.calculateMenuBarCount(
+      mode: preferences.menuBarCountMode,
+      includeMyPullRequests: preferences.includeMyPullRequestsInMenuBarCount,
+      sections: preferences.sections,
+      snapshots: Dictionary(
+        uniqueKeysWithValues: preferences.sections.map { ($0.id, pullRequests(in: $0)) }))
+  }
+
+  nonisolated static func calculateMenuBarCount(
+    mode: MenuBarCountMode,
+    includeMyPullRequests: Bool,
+    sections: [PRSection],
+    snapshots: [UUID: [PullRequest]]
+  ) -> Int? {
+    let qualifiers: [String]
+    switch mode {
+    case .none: return nil
+    case .awaitingReview:
+      qualifiers =
+        includeMyPullRequests
+        ? ["review-requested:@me", "author:@me"] : ["review-requested:@me"]
+    case .openedByMe: qualifiers = ["author:@me"]
+    case .allShown: qualifiers = []
     }
+
+    let matchingSections = qualifiers.isEmpty
+      ? sections
+      : sections.filter { section in qualifiers.contains { section.query.contains($0) } }
+    return Set(matchingSections.flatMap { snapshots[$0.id, default: []].map(\.id) }).count
   }
 
   func start() {

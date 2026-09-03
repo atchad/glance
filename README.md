@@ -57,9 +57,11 @@ Glance starts with sections for pull requests requesting your review and pull re
 
 - Add, rename, reorder, or remove sections backed by validated GitHub pull-request searches.
 - Include or exclude repositories with search and bulk selection.
-- Choose which pull requests contribute to the menu-bar count.
+- Choose which pull requests contribute to the menu-bar count, including whether review requests
+  also count pull requests you opened.
 - Control notifications, refresh frequency, launch behavior, and panel behavior.
-- Adjust row details, status presentation, and completed-review filtering.
+- Adjust row details, including optional additions and deletions, status presentation, and
+  completed-review filtering.
 
 Click a pull request to open it on GitHub. Its context menu can also copy the URL or branch name.
 

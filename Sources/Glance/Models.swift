@@ -220,12 +220,14 @@ struct Preferences: Codable {
   var refreshInterval: TimeInterval = 60
   var appearanceMode: AppearanceMode = .system
   var panelLevel: PanelLevel = .floating
-  var openPanelAtLaunch = true
+  var openPanelAtLaunch = false
   var openAtLogin = true
   var sections: [PRSection] = PRSection.defaults
   var menuBarCountMode: MenuBarCountMode = .awaitingReview
+  var includeMyPullRequestsInMenuBarCount = false
   var showAuthor = true
   var showUpdatedAt = true
+  var showLineChanges = false
   var showCheckStatus = true
   var showReviewStatus = true
   var statusDisplayMode: StatusDisplayMode = .compactIcons
@@ -251,7 +253,8 @@ struct Preferences: Codable {
 
   private enum CodingKeys: String, CodingKey {
     case refreshInterval, appearanceMode, panelLevel, openPanelAtLaunch, openAtLogin, sections
-    case menuBarCountMode, showAuthor, showUpdatedAt, showCheckStatus, showReviewStatus
+    case menuBarCountMode, includeMyPullRequestsInMenuBarCount
+    case showAuthor, showUpdatedAt, showLineChanges, showCheckStatus, showReviewStatus
     case statusDisplayMode, timeDisplayMode, commandClickDismisses, notificationsEnabled
     case removePullRequestsAfterApproval, showChangedPullRequestsAfterApproval
     case removePullRequestsAfterOtherApproval
@@ -268,14 +271,17 @@ struct Preferences: Codable {
     appearanceMode =
       try values.decodeIfPresent(AppearanceMode.self, forKey: .appearanceMode) ?? .system
     panelLevel = try values.decodeIfPresent(PanelLevel.self, forKey: .panelLevel) ?? .floating
-    openPanelAtLaunch = try values.decodeIfPresent(Bool.self, forKey: .openPanelAtLaunch) ?? true
+    openPanelAtLaunch = try values.decodeIfPresent(Bool.self, forKey: .openPanelAtLaunch) ?? false
     openAtLogin = try values.decodeIfPresent(Bool.self, forKey: .openAtLogin) ?? true
     sections = try values.decodeIfPresent([PRSection].self, forKey: .sections) ?? PRSection.defaults
     menuBarCountMode =
       try values.decodeIfPresent(MenuBarCountMode.self, forKey: .menuBarCountMode)
       ?? .awaitingReview
+    includeMyPullRequestsInMenuBarCount =
+      try values.decodeIfPresent(Bool.self, forKey: .includeMyPullRequestsInMenuBarCount) ?? false
     showAuthor = try values.decodeIfPresent(Bool.self, forKey: .showAuthor) ?? true
     showUpdatedAt = try values.decodeIfPresent(Bool.self, forKey: .showUpdatedAt) ?? true
+    showLineChanges = try values.decodeIfPresent(Bool.self, forKey: .showLineChanges) ?? false
     showCheckStatus = try values.decodeIfPresent(Bool.self, forKey: .showCheckStatus) ?? true
     showReviewStatus = try values.decodeIfPresent(Bool.self, forKey: .showReviewStatus) ?? true
     statusDisplayMode =
@@ -313,8 +319,11 @@ struct Preferences: Codable {
     try values.encode(openAtLogin, forKey: .openAtLogin)
     try values.encode(sections, forKey: .sections)
     try values.encode(menuBarCountMode, forKey: .menuBarCountMode)
+    try values.encode(
+      includeMyPullRequestsInMenuBarCount, forKey: .includeMyPullRequestsInMenuBarCount)
     try values.encode(showAuthor, forKey: .showAuthor)
     try values.encode(showUpdatedAt, forKey: .showUpdatedAt)
+    try values.encode(showLineChanges, forKey: .showLineChanges)
     try values.encode(showCheckStatus, forKey: .showCheckStatus)
     try values.encode(showReviewStatus, forKey: .showReviewStatus)
     try values.encode(statusDisplayMode, forKey: .statusDisplayMode)

@@ -132,6 +132,11 @@ private struct GeneralSettingsPage: View {
         Picker("Count", selection: $store.preferences.menuBarCountMode) {
           ForEach(MenuBarCountMode.allCases) { mode in Text(mode.title).tag(mode) }
         }
+        if store.preferences.menuBarCountMode == .awaitingReview {
+          Toggle(
+            "Include pull requests opened by me",
+            isOn: $store.preferences.includeMyPullRequestsInMenuBarCount)
+        }
       }
       Section("Refresh") {
         Picker("Refresh pull requests", selection: $store.preferences.refreshInterval) {
@@ -216,6 +221,7 @@ private struct ReviewSettingsPage: View {
             ForEach(TimeDisplayMode.allCases) { mode in Text(mode.title).tag(mode) }
           }
         }
+        Toggle("Additions and deletions", isOn: $store.preferences.showLineChanges)
         Picker("Status layout", selection: $store.preferences.statusDisplayMode) {
           ForEach(StatusDisplayMode.allCases) { mode in Text(mode.title).tag(mode) }
         }

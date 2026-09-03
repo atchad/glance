@@ -40,11 +40,14 @@ final class ModelsTests: XCTestCase {
 
   func testOlderPreferencesGainNewDisplayDefaults() throws {
     let json = """
-      {"refreshInterval":30,"panelLevel":"floating","openPanelAtLaunch":true,"sections":[]}
+      {"refreshInterval":30,"panelLevel":"floating","sections":[]}
       """
     let preferences = try JSONDecoder().decode(Preferences.self, from: Data(json.utf8))
+    XCTAssertFalse(preferences.openPanelAtLaunch)
     XCTAssertEqual(preferences.menuBarCountMode, .awaitingReview)
+    XCTAssertFalse(preferences.includeMyPullRequestsInMenuBarCount)
     XCTAssertEqual(preferences.appearanceMode, .system)
+    XCTAssertFalse(preferences.showLineChanges)
     XCTAssertTrue(preferences.showCheckStatus)
     XCTAssertTrue(preferences.showReviewStatus)
     XCTAssertEqual(preferences.statusDisplayMode, .compactIcons)
@@ -57,6 +60,47 @@ final class ModelsTests: XCTestCase {
     XCTAssertTrue(preferences.openAtLogin)
     XCTAssertTrue(preferences.notificationsEnabled)
     XCTAssertTrue(preferences.excludedRepositories.isEmpty)
+  }
+
+  func testExplicitOpenPanelAtLaunchPreferenceIsPreserved() throws {
+    let json = #"{"openPanelAtLaunch":true}"#
+    let preferences = try JSONDecoder().decode(Preferences.self, from: Data(json.utf8))
+    XCTAssertTrue(preferences.openPanelAtLaunch)
+  }
+
+  @MainActor
+  func testMenuBarCountCanIncludePullRequestsOpenedByViewer() {
+    let reviewSection = PRSection(name: "For Review", query: "is:pr review-requested:@me")
+    let mineSection = PRSection(name: "Opened by Me", query: "is:pr author:@me")
+    let review = makePullRequest(id: "review")
+    let mine = makePullRequest(id: "mine")
+    let shared = makePullRequest(id: "shared")
+    let snapshots = [reviewSection.id: [review, shared], mineSection.id: [mine, shared]]
+
+    XCTAssertEqual(
+      AppStore.calculateMenuBarCount(
+        mode: .awaitingReview, includeMyPullRequests: false,
+        sections: [reviewSection, mineSection], snapshots: snapshots),
+      2)
+    XCTAssertEqual(
+      AppStore.calculateMenuBarCount(
+        mode: .awaitingReview, includeMyPullRequests: true,
+        sections: [reviewSection, mineSection], snapshots: snapshots),
+      3)
+    XCTAssertEqual(
+      AppStore.calculateMenuBarCount(
+        mode: .openedByMe, includeMyPullRequests: false,
+        sections: [reviewSection, mineSection], snapshots: snapshots),
+      2)
+    XCTAssertEqual(
+      AppStore.calculateMenuBarCount(
+        mode: .allShown, includeMyPullRequests: false,
+        sections: [reviewSection, mineSection], snapshots: snapshots),
+      3)
+    XCTAssertNil(
+      AppStore.calculateMenuBarCount(
+        mode: .none, includeMyPullRequests: true,
+        sections: [reviewSection, mineSection], snapshots: snapshots))
   }
 
   func testAllVendoredOcticonsLoad() {

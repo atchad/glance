@@ -60,7 +60,7 @@ struct KeychainCredentialStore: CredentialSecureStore {
     }
     var item = query
     item[kSecValueData as String] = token
-    item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+    item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
     let addStatus = SecItemAdd(item as CFDictionary, nil)
     guard addStatus == errSecSuccess else {
       throw KeychainCredentialError.operationFailed(addStatus)

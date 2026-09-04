@@ -1,7 +1,27 @@
 import Foundation
 
-struct GitHubCredential: Sendable, Equatable {
+struct GitHubCredential: Codable, Sendable, Equatable {
   let accessToken: String
+  let refreshToken: String?
+  let expiresAt: Date?
+  let refreshTokenExpiresAt: Date?
+
+  init(
+    accessToken: String,
+    refreshToken: String? = nil,
+    expiresAt: Date? = nil,
+    refreshTokenExpiresAt: Date? = nil
+  ) {
+    self.accessToken = accessToken
+    self.refreshToken = refreshToken
+    self.expiresAt = expiresAt
+    self.refreshTokenExpiresAt = refreshTokenExpiresAt
+  }
+
+  func needsRefresh(at date: Date, leeway: TimeInterval = 60) -> Bool {
+    guard let expiresAt else { return false }
+    return expiresAt.timeIntervalSince(date) <= leeway
+  }
 }
 
 protocol GitHubCredentialProvider: Sendable {

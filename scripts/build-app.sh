@@ -29,6 +29,12 @@ mkdir -p "$contents_path/MacOS" "$contents_path/Resources" "$frameworks_path"
 cp "$binary_path" "$contents_path/MacOS/Glance"
 cp -R "$binary_directory/Glance_Glance.bundle" "$contents_path/Resources/Glance_Glance.bundle"
 cp "$repo_root/support/Info.plist" "$contents_path/Info.plist"
+if [[ -n "${GLANCE_GITHUB_OAUTH_CLIENT_ID:-}" ]]; then
+    /usr/bin/plutil -insert GlanceGitHubOAuthClientID -string \
+        "$GLANCE_GITHUB_OAUTH_CLIENT_ID" "$contents_path/Info.plist" 2>/dev/null \
+        || /usr/bin/plutil -replace GlanceGitHubOAuthClientID -string \
+            "$GLANCE_GITHUB_OAUTH_CLIENT_ID" "$contents_path/Info.plist"
+fi
 cp "$repo_root/support/Glance.icns" "$contents_path/Resources/Glance.icns"
 cp "$sparkle_license" "$contents_path/Resources/Sparkle-LICENSE.txt"
 ditto "$sparkle_framework_source" "$sparkle_framework"

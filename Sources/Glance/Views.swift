@@ -760,10 +760,15 @@ private struct GitHubSetupView: View {
     ContentUnavailableView {
       Label("Connect GitHub", systemImage: "person.crop.circle.badge.exclamationmark")
     } description: {
-      Text("Sign in directly, or use an existing GitHub CLI account.")
+      Text(
+        "Glance uses the account signed in through GitHub CLI. Install it, run “gh auth login,” then try again."
+      )
     } actions: {
-      GitHubConnectionView(store: store, compact: true)
-        .frame(maxWidth: 340)
+      HStack {
+        Link("Get GitHub CLI", destination: URL(string: "https://cli.github.com/")!)
+        Button("Try Again") { store.refresh() }
+          .help("Check your GitHub connection")
+      }
     }
     .padding()
     .frame(maxWidth: .infinity, maxHeight: .infinity)

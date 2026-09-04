@@ -408,14 +408,6 @@ enum GlobalShortcut: String, Codable, CaseIterable, Identifiable {
   }
 }
 
-enum GitHubAuthenticationMethod: String, Codable, CaseIterable, Identifiable {
-  case direct
-  case githubCLI
-
-  var id: String { rawValue }
-  var title: String { self == .direct ? "Glance" : "GitHub CLI" }
-}
-
 struct Preferences: Codable {
   struct ApprovalCachePolicy: Equatable {
     let removesApproved: Bool
@@ -452,7 +444,6 @@ struct Preferences: Codable {
   var snoozes: [String: PRSnooze] = [:]
   var pinnedPullRequests: Set<String> = []
   var globalShortcut: GlobalShortcut = .none
-  var githubAuthenticationMethod: GitHubAuthenticationMethod = .githubCLI
 
   static let `default` = Preferences()
 
@@ -476,7 +467,6 @@ struct Preferences: Codable {
     case excludedRepositories, mutedNotificationRepositories
     case dismissedRevisions
     case notificationEvents, snoozes, pinnedPullRequests, globalShortcut
-    case githubAuthenticationMethod
   }
 
   init() {}
@@ -534,9 +524,6 @@ struct Preferences: Codable {
       try values.decodeIfPresent(Set<String>.self, forKey: .pinnedPullRequests) ?? []
     globalShortcut =
       try values.decodeIfPresent(GlobalShortcut.self, forKey: .globalShortcut) ?? .none
-    githubAuthenticationMethod =
-      try values.decodeIfPresent(GitHubAuthenticationMethod.self, forKey: .githubAuthenticationMethod)
-      ?? .githubCLI
   }
 
   func encode(to encoder: Encoder) throws {
@@ -573,7 +560,6 @@ struct Preferences: Codable {
     try values.encode(snoozes, forKey: .snoozes)
     try values.encode(pinnedPullRequests, forKey: .pinnedPullRequests)
     try values.encode(globalShortcut, forKey: .globalShortcut)
-    try values.encode(githubAuthenticationMethod, forKey: .githubAuthenticationMethod)
   }
 }
 

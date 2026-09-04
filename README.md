@@ -37,27 +37,15 @@ With the panel focused, use the arrow keys or J/K to move between pull requests,
 
 ## Install
 
-Glance requires macOS 14 or later and an authenticated installation of [GitHub CLI](https://cli.github.com/).
+Glance requires macOS 14 or later and a GitHub account.
 
-1. Install GitHub CLI if needed:
-
-   ```sh
-   brew install gh
-   ```
-
-2. Connect it to GitHub:
-
-   ```sh
-   gh auth login
-   ```
-
-3. [Download the latest Glance DMG](https://github.com/atchad/glance/releases/latest/download/Glance.dmg), open it, and drag Glance into Applications.
-4. Launch Glance. Its pull-request count will appear in the menu bar.
+1. [Download the latest Glance DMG](https://github.com/atchad/glance/releases/latest/download/Glance.dmg), open it, and drag Glance into Applications.
+2. Launch Glance and choose **Connect to GitHub**. Glance opens GitHub in your browser and shows the one-time code to enter.
+3. Approve access on GitHub. Glance finishes connecting automatically and its pull-request count appears in the menu bar.
 
 Glance releases are universal for Apple silicon and Intel Macs, signed with a Developer ID certificate, and notarized by Apple.
 
-> [!NOTE]
-> Glance is currently a preview. GitHub CLI provides authentication for now; a future general-distribution build should use a GitHub App and browser-based sign-in.
+If you already use [GitHub CLI](https://cli.github.com/), you can choose **Use GitHub CLI** instead. Existing Glance installations continue using their GitHub CLI account until you switch methods.
 
 ## Make it yours
 
@@ -77,13 +65,15 @@ Click a pull request to open it on GitHub. Its context menu can also copy the UR
 
 ## Privacy and local data
 
-Glance asks GitHub CLI for your existing token when it refreshes and does not persist that token itself. Pull-request metadata and preferences are stored locally in:
+Direct GitHub sign-in stores access and refresh credentials in your login Keychain. GitHub CLI mode asks `gh` for its existing token when Glance refreshes and does not copy that token. Pull-request metadata and preferences are stored locally in:
 
 ```text
 ~/Library/Application Support/Glance
 ```
 
 Excluding a repository removes its pull requests from the live queue and local cache and prevents new-review notifications from that repository.
+
+Disconnecting direct GitHub sign-in deletes Glance's credential from Keychain. It does not delete your saved pull-request cache or alter GitHub CLI authentication.
 
 ## Build from source
 

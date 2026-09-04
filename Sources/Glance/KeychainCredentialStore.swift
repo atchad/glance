@@ -113,7 +113,7 @@ struct KeychainCredentialProvider: GitHubCredentialProvider {
 
   func credential() async throws -> GitHubCredential {
     guard let credential = try store.load(account: account) else {
-      throw GitHubError.notAuthenticated("Connect Glance to GitHub in Settings.")
+      throw GitHubError.notAuthenticated("Glance is not connected directly to GitHub.")
     }
     return credential
   }
@@ -122,14 +122,14 @@ struct KeychainCredentialProvider: GitHubCredentialProvider {
 actor GitHubOAuthCredentialProvider: GitHubCredentialProvider {
   let store: any CredentialSecureStore
   let account: String
-  let authorizationService: GitHubDeviceAuthorizationService
+  let authorizationService: any GitHubDeviceAuthorizing
   let now: @Sendable () -> Date
   private var refreshTask: Task<GitHubCredential, Error>?
 
   init(
     store: any CredentialSecureStore = KeychainCredentialStore(),
     account: String = "github.com",
-    authorizationService: GitHubDeviceAuthorizationService,
+    authorizationService: any GitHubDeviceAuthorizing,
     now: @escaping @Sendable () -> Date = { Date() }
   ) {
     self.store = store

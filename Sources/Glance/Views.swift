@@ -12,6 +12,7 @@ struct DashboardView: View {
   @State private var searchText = ""
   @State private var selectedPullRequestID: String?
   @FocusState private var isSearchFocused: Bool
+  @FocusState private var isDashboardFocused: Bool
 
   var body: some View {
     VStack(spacing: 0) {
@@ -40,6 +41,9 @@ struct DashboardView: View {
           .onChange(of: searchText) { _, _ in
             proxy.scrollTo("dashboard-top", anchor: .top)
           }
+          .onChange(of: selectedPullRequestID) { _, id in
+            if let id { proxy.scrollTo(id, anchor: .center) }
+          }
         }
       }
       Divider()
@@ -50,6 +54,8 @@ struct DashboardView: View {
     )
     .background(.regularMaterial)
     .focusable()
+    .focused($isDashboardFocused)
+    .onAppear { isDashboardFocused = true }
     .onKeyPress(.downArrow) {
       guard !isSearchFocused else { return .ignored }
       moveSelection(by: 1)
@@ -58,6 +64,21 @@ struct DashboardView: View {
     .onKeyPress(.upArrow) {
       guard !isSearchFocused else { return .ignored }
       moveSelection(by: -1)
+      return .handled
+    }
+    .onKeyPress("j") {
+      guard !isSearchFocused else { return .ignored }
+      moveSelection(by: 1)
+      return .handled
+    }
+    .onKeyPress("k") {
+      guard !isSearchFocused else { return .ignored }
+      moveSelection(by: -1)
+      return .handled
+    }
+    .onKeyPress("/") {
+      guard !isSearchFocused else { return .ignored }
+      isSearchFocused = true
       return .handled
     }
     .onKeyPress(.return) {
@@ -202,6 +223,7 @@ struct DashboardView: View {
               isSelected: selectedPullRequestID == pullRequest.id,
               select: { selectedPullRequestID = pullRequest.id }
             )
+            .id(pullRequest.id)
             if pullRequest.id != items.last?.id { Divider().padding(.leading, 30) }
           }
         }

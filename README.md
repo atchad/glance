@@ -33,6 +33,8 @@ Glance keeps your GitHub pull requests one click away in the menu bar. Open its 
 
 Command-click a pull request to dismiss its current revision. If a new commit is pushed, the pull request returns automatically. Use a row's context menu to pin it or snooze it.
 
+With the panel focused, use the arrow keys or J/K to move between pull requests, Return to open the selected pull request, D to dismiss it, P to pin it, R to refresh, and / to search.
+
 ## Install
 
 Glance requires macOS 14 or later and an authenticated installation of [GitHub CLI](https://cli.github.com/).

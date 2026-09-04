@@ -27,11 +27,6 @@ lipo dist/Glance.app/Contents/MacOS/Glance -verify_arch arm64 x86_64
 
 Local application bundles receive an ad-hoc signature when a Developer ID identity is not available. You do not need the maintainer's signing or notarization credentials to contribute.
 
-Native GitHub sign-in requires a registered OAuth App client ID at bundle-build time. See
-[`docs/NATIVE_AUTHENTICATION.md`](docs/NATIVE_AUTHENTICATION.md) for the device-flow and local-build
-configuration. The client ID is optional for ordinary development and tests; never add OAuth
-tokens or client secrets to the repository.
-
 ## Pull requests
 
 - Describe the problem and the behavior your change introduces.

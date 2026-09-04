@@ -134,10 +134,7 @@ jobs:
           print "GLANCE_NOTARY_ISSUER_ID=$NOTARY_ISSUER_ID" >> "$GITHUB_ENV"
 
       - name: Build, sign, notarize, and staple installers
-        env:
-          GLANCE_GITHUB_OAUTH_CLIENT_ID: ${{ vars.GLANCE_GITHUB_OAUTH_CLIENT_ID }}
         run: |
-          : "${GLANCE_GITHUB_OAUTH_CLIENT_ID:?Missing GitHub OAuth client ID variable}"
           ./scripts/build-dmg.sh
           ./scripts/build-pkg.sh
 
@@ -150,7 +147,6 @@ jobs:
 
       - name: Verify release artifacts
         run: |
-          test -n "$(plutil -extract GlanceGitHubOAuthClientID raw dist/Glance.app/Contents/Info.plist)"
           codesign --verify --deep --strict --verbose=2 dist/Glance.app
           lipo dist/Glance.app/Contents/MacOS/Glance -verify_arch arm64 x86_64
           xcrun stapler validate dist/Glance.dmg

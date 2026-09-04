@@ -7,13 +7,6 @@ enum AppConnectionIssue: Equatable {
   case unavailable
 }
 
-enum GitHubConnectionState: Equatable {
-  case disconnected
-  case connecting
-  case connected(login: String)
-  case failed(String)
-}
-
 @MainActor
 final class AppStore: ObservableObject {
   @Published private(set) var snapshots: [UUID: [PullRequest]] = [:]
@@ -27,8 +20,6 @@ final class AppStore: ObservableObject {
   @Published private(set) var accessibleRepositories: [String] = []
   @Published private(set) var isLoadingRepositories = false
   @Published private(set) var repositoryLoadError: String?
-  @Published private(set) var githubConnectionState: GitHubConnectionState = .disconnected
-  @Published private(set) var githubDeviceCode: GitHubDeviceCode?
   @Published var preferences: Preferences {
     didSet {
       savePreferences()
@@ -39,39 +30,14 @@ final class AppStore: ObservableObject {
     }
   }
 
-  private var client: GitHubClient
-  private let credentialStore: any CredentialSecureStore
-  private let authorizationServiceFactory: () throws -> any GitHubDeviceAuthorizing
-  private let persistsToDisk: Bool
-  private let refreshAfterAuthentication: Bool
-  private let openURL: (URL) -> Void
-  private var authorizationService: (any GitHubDeviceAuthorizing)?
-  private lazy var notificationManager = NotificationManager()
+  private let client = GitHubClient()
+  private let notificationManager = NotificationManager()
   private var refreshTask: Task<Void, Never>?
   private var timerTask: Task<Void, Never>?
   private var hasNotificationBaseline = false
-  private var signInTask: Task<Void, Never>?
-  private var signInAttemptID: UUID?
 
-  init(
-    credentialStore: any CredentialSecureStore = KeychainCredentialStore(),
-    initialPreferences: Preferences? = nil,
-    persistsToDisk: Bool = true,
-    refreshAfterAuthentication: Bool = true,
-    openURL: @escaping (URL) -> Void = { NSWorkspace.shared.open($0) },
-    authorizationServiceFactory: @escaping () throws -> any GitHubDeviceAuthorizing = {
-      GitHubDeviceAuthorizationService(configuration: try .bundled())
-    }
-  ) {
-    self.credentialStore = credentialStore
-    self.authorizationServiceFactory = authorizationServiceFactory
-    self.persistsToDisk = persistsToDisk
-    self.refreshAfterAuthentication = refreshAfterAuthentication
-    self.openURL = openURL
-    client = GitHubClient()
-    var loaded = initialPreferences
-      ?? (persistsToDisk ? Self.load(Preferences.self, from: Self.preferencesURL) : nil)
-      ?? .default
+  init() {
+    var loaded = Self.load(Preferences.self, from: Self.preferencesURL) ?? .default
     for index in loaded.sections.indices {
       switch loaded.sections[index].name {
       case "Needs My Review": loaded.sections[index].name = "For Review"
@@ -88,9 +54,8 @@ final class AppStore: ObservableObject {
       loaded.sections[index].isCollapsed = false
     }
     preferences = loaded
-    configureGitHubClient()
     Self.applyAppearance(loaded.appearanceMode)
-    if persistsToDisk, let cache = Self.load(GlanceCache.self, from: Self.cacheURL) {
+    if let cache = Self.load(GlanceCache.self, from: Self.cacheURL) {
       let cachedSnapshots = Dictionary(
         uniqueKeysWithValues: cache.snapshots.map { ($0.id, $0.pullRequests) })
       snapshots = Self.removingExcludedRepositories(
@@ -102,23 +67,6 @@ final class AppStore: ObservableObject {
       hasNotificationBaseline = true
       if !preferences.excludedRepositories.isEmpty { saveCache() }
     }
-    if preferences.githubAuthenticationMethod == .direct {
-      do {
-        githubConnectionState = try credentialStore.load(account: "github.com") == nil
-          ? .disconnected : viewerLogin.map(GitHubConnectionState.connected(login:)) ?? .disconnected
-      } catch {
-        githubConnectionState = .failed(error.localizedDescription)
-      }
-    }
-  }
-
-  var githubAuthenticationMethod: GitHubAuthenticationMethod {
-    preferences.githubAuthenticationMethod
-  }
-
-  var isGitHubSignInActive: Bool {
-    if case .connecting = githubConnectionState { return true }
-    return false
   }
 
   var needsReviewCount: Int {
@@ -195,89 +143,6 @@ final class AppStore: ObservableObject {
   func setNotificationsEnabled(_ enabled: Bool) {
     preferences.notificationsEnabled = enabled
     if enabled { configureNotifications() } else { notificationAuthorizationMessage = nil }
-  }
-
-  func connectDirectlyToGitHub() {
-    signInTask?.cancel()
-    let attemptID = UUID()
-    signInAttemptID = attemptID
-    githubDeviceCode = nil
-    githubConnectionState = .connecting
-    errorMessage = nil
-    connectionIssue = nil
-    signInTask = Task { [weak self] in
-      guard let self else { return }
-      do {
-        let service = try authorizationServiceFactory()
-        authorizationService = service
-        let code = try await service.requestDeviceCode()
-        try Task.checkCancellation()
-        guard signInAttemptID == attemptID else { return }
-        githubDeviceCode = code
-        openURL(code.verificationURL)
-        let identity = try await service.waitForAuthorization(deviceCode: code)
-        try Task.checkCancellation()
-        guard signInAttemptID == attemptID else { return }
-        try credentialStore.save(identity.credential, account: "github.com")
-        preferences.githubAuthenticationMethod = .direct
-        viewerLogin = identity.login
-        githubConnectionState = .connected(login: identity.login)
-        githubDeviceCode = nil
-        configureGitHubClient()
-        if refreshAfterAuthentication { refresh() }
-      } catch let error as GitHubDeviceAuthorizationError where error == .cancelled {
-        if signInAttemptID == attemptID {
-          githubConnectionState = .disconnected
-          githubDeviceCode = nil
-        }
-      } catch is CancellationError {
-        if signInAttemptID == attemptID {
-          githubConnectionState = .disconnected
-          githubDeviceCode = nil
-        }
-      } catch {
-        if signInAttemptID == attemptID {
-          githubConnectionState = .failed(error.localizedDescription)
-          githubDeviceCode = nil
-        }
-      }
-      if signInAttemptID == attemptID {
-        signInAttemptID = nil
-        signInTask = nil
-      }
-    }
-  }
-
-  func cancelGitHubSignIn() {
-    signInAttemptID = nil
-    signInTask?.cancel()
-    signInTask = nil
-    githubDeviceCode = nil
-    githubConnectionState = .disconnected
-  }
-
-  func useGitHubCLI() {
-    cancelGitHubSignIn()
-    preferences.githubAuthenticationMethod = .githubCLI
-    githubConnectionState = .disconnected
-    configureGitHubClient()
-    refresh()
-  }
-
-  func disconnectGitHub() {
-    cancelGitHubSignIn()
-    do {
-      try credentialStore.delete(account: "github.com")
-      if preferences.githubAuthenticationMethod == .direct {
-        viewerLogin = nil
-        githubConnectionState = .disconnected
-        configureGitHubClient()
-        errorMessage = "Connect Glance to GitHub to refresh pull requests."
-        connectionIssue = .authentication
-      }
-    } catch {
-      githubConnectionState = .failed(error.localizedDescription)
-    }
   }
 
   func loadAccessibleRepositories() async {
@@ -362,10 +227,7 @@ final class AppStore: ObservableObject {
           return snooze.isActive(for: pullRequest)
         }
         preferences.pinnedPullRequests.formIntersection(activeIDs)
-        if !result.viewer.isEmpty {
-          viewerLogin = result.viewer
-          githubConnectionState = .connected(login: result.viewer)
-        }
+        if !result.viewer.isEmpty { viewerLogin = result.viewer }
         lastUpdated = Date()
         isRefreshing = false
         saveCache()
@@ -376,9 +238,6 @@ final class AppStore: ObservableObject {
         self?.errorMessage = error.localizedDescription
         self?.connectionIssue = Self.connectionIssue(for: error)
         self?.isRefreshing = false
-        if self?.connectionIssue == .authentication {
-          self?.githubConnectionState = .failed(error.localizedDescription)
-        }
       }
     }
   }
@@ -569,34 +428,9 @@ final class AppStore: ObservableObject {
     return Set(matchingIDs).count
   }
 
-  private func savePreferences() {
-    guard persistsToDisk else { return }
-    Self.save(preferences, to: Self.preferencesURL)
-  }
-
-  private func configureGitHubClient() {
-    switch preferences.githubAuthenticationMethod {
-    case .githubCLI:
-      authorizationService = nil
-      client = GitHubClient(session: GitHubSession(credentialProvider: GitHubCLICredentialProvider()))
-    case .direct:
-      do {
-        let service = try authorizationServiceFactory()
-        authorizationService = service
-        let provider = GitHubOAuthCredentialProvider(
-          store: credentialStore, authorizationService: service)
-        client = GitHubClient(session: GitHubSession(credentialProvider: provider))
-      } catch {
-        authorizationService = nil
-        client = GitHubClient(
-          session: GitHubSession(
-            credentialProvider: KeychainCredentialProvider(store: credentialStore)))
-      }
-    }
-  }
+  private func savePreferences() { Self.save(preferences, to: Self.preferencesURL) }
 
   private func saveCache() {
-    guard persistsToDisk else { return }
     let cache = GlanceCache(
       savedAt: lastUpdated ?? Date(), viewerLogin: viewerLogin,
       snapshots: preferences.sections.map {

@@ -35,30 +35,35 @@ enum QueryValidationError: LocalizedError {
 }
 
 struct GitHubClient {
-  private let endpoint = URL(string: "https://api.github.com/graphql")!
+  private let session: GitHubSession
+  private let requestFactory: GitHubRequestFactory
+  private let urlSession: URLSession
+
+  init(session: GitHubSession = GitHubSession(), urlSession: URLSession = .shared) {
+    self.session = session
+    requestFactory = GitHubRequestFactory(host: session.host)
+    self.urlSession = urlSession
+  }
 
   func fetchAccessibleRepositories() async throws -> [String] {
-    let token = try await tokenFromGitHubCLI()
+    let credential = try await session.credential()
     var page = 1
     var repositories: [String] = []
 
     while true {
-      var components = URLComponents(string: "https://api.github.com/user/repos")!
-      components.queryItems = [
-        URLQueryItem(name: "affiliation", value: "owner,collaborator,organization_member"),
-        URLQueryItem(name: "visibility", value: "all"),
-        URLQueryItem(name: "sort", value: "full_name"),
-        URLQueryItem(name: "direction", value: "asc"),
-        URLQueryItem(name: "per_page", value: "100"),
-        URLQueryItem(name: "page", value: String(page)),
-      ]
-      guard let url = components.url else { throw GitHubError.invalidResponse }
-      var request = URLRequest(url: url)
-      request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-      request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-      request.setValue("Glance/0.1", forHTTPHeaderField: "User-Agent")
+      let request = try requestFactory.restRequest(
+        path: "user/repos",
+        queryItems: [
+          URLQueryItem(name: "affiliation", value: "owner,collaborator,organization_member"),
+          URLQueryItem(name: "visibility", value: "all"),
+          URLQueryItem(name: "sort", value: "full_name"),
+          URLQueryItem(name: "direction", value: "asc"),
+          URLQueryItem(name: "per_page", value: "100"),
+          URLQueryItem(name: "page", value: String(page)),
+        ],
+        credential: credential)
 
-      let (data, response) = try await URLSession.shared.data(for: request)
+      let (data, response) = try await urlSession.data(for: request)
       guard let http = response as? HTTPURLResponse else { throw GitHubError.invalidResponse }
       guard (200..<300).contains(http.statusCode) else {
         let message =
@@ -81,11 +86,11 @@ struct GitHubClient {
   func fetchAll(sections: [PRSection]) async throws -> (
     viewer: String, snapshots: [SectionSnapshot]
   ) {
-    let token = try await tokenFromGitHubCLI()
+    let credential = try await session.credential()
     return try await withThrowingTaskGroup(of: (Int, String, SectionSnapshot).self) { group in
       for (index, section) in sections.enumerated() {
         group.addTask {
-          let result = try await fetch(section: section, token: token)
+          let result = try await fetch(section: section, credential: credential)
           return (
             index, result.viewer, SectionSnapshot(id: section.id, pullRequests: result.pullRequests)
           )
@@ -117,16 +122,14 @@ struct GitHubClient {
     }
     guard unescapedQuoteCount.isMultiple(of: 2) else { throw QueryValidationError.unmatchedQuote }
 
-    let token = try await tokenFromGitHubCLI()
-    var components = URLComponents(string: "https://api.github.com/search/issues")!
-    components.queryItems = [
-      URLQueryItem(name: "q", value: trimmed), URLQueryItem(name: "per_page", value: "1"),
-    ]
-    var request = URLRequest(url: components.url!)
-    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-    request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-    request.setValue("Glance/0.1", forHTTPHeaderField: "User-Agent")
-    let (data, response) = try await URLSession.shared.data(for: request)
+    let credential = try await session.credential()
+    let request = try requestFactory.restRequest(
+      path: "search/issues",
+      queryItems: [
+        URLQueryItem(name: "q", value: trimmed), URLQueryItem(name: "per_page", value: "1"),
+      ],
+      credential: credential)
+    let (data, response) = try await urlSession.data(for: request)
     guard let http = response as? HTTPURLResponse else { throw GitHubError.invalidResponse }
     guard (200..<300).contains(http.statusCode) else {
       let message =
@@ -136,7 +139,7 @@ struct GitHubClient {
     }
   }
 
-  private func fetch(section: PRSection, token: String) async throws -> (
+  private func fetch(section: PRSection, credential: GitHubCredential) async throws -> (
     viewer: String, pullRequests: [PullRequest]
   ) {
     var viewer = ""
@@ -144,7 +147,7 @@ struct GitHubClient {
     var cursor: String?
 
     repeat {
-      let page = try await fetchPage(section: section, token: token, cursor: cursor)
+      let page = try await fetchPage(section: section, credential: credential, cursor: cursor)
       viewer = page.viewer
       pullRequests.append(contentsOf: page.pullRequests)
       cursor = page.nextCursor
@@ -155,7 +158,7 @@ struct GitHubClient {
 
   private func fetchPage(
     section: PRSection,
-    token: String,
+    credential: GitHubCredential,
     cursor: String?
   ) async throws -> (viewer: String, pullRequests: [PullRequest], nextCursor: String?) {
     let query = """
@@ -230,14 +233,10 @@ struct GitHubClient {
       query: query,
       variables: GraphQLVariables(query: section.query, cursor: cursor)
     )
-    var request = URLRequest(url: endpoint)
-    request.httpMethod = "POST"
-    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    request.setValue("Glance/0.1", forHTTPHeaderField: "User-Agent")
-    request.httpBody = try JSONEncoder().encode(payload)
+    let request = requestFactory.graphQLRequest(
+      body: try JSONEncoder().encode(payload), credential: credential)
 
-    let (data, response) = try await URLSession.shared.data(for: request)
+    let (data, response) = try await urlSession.data(for: request)
     guard let http = response as? HTTPURLResponse else { throw GitHubError.invalidResponse }
     guard (200..<300).contains(http.statusCode) else {
       throw GitHubError.api("GitHub request failed with status \(http.statusCode).")
@@ -251,42 +250,6 @@ struct GitHubClient {
     }
     let nextCursor = graph.search.pageInfo.hasNextPage ? graph.search.pageInfo.endCursor : nil
     return (graph.viewer.login, pullRequests, nextCursor)
-  }
-
-  private func tokenFromGitHubCLI() async throws -> String {
-    try await Task.detached(priority: .userInitiated) {
-      let process = Process()
-      let output = Pipe()
-      let errors = Pipe()
-      let candidates = [
-        "/opt/homebrew/bin/gh",
-        "/usr/local/bin/gh",
-        "/usr/bin/gh",
-      ]
-      guard
-        let executable = candidates.first(where: {
-          FileManager.default.isExecutableFile(atPath: $0)
-        })
-      else {
-        throw GitHubError.ghUnavailable
-      }
-      process.executableURL = URL(fileURLWithPath: executable)
-      process.arguments = ["auth", "token"]
-      process.standardOutput = output
-      process.standardError = errors
-      do { try process.run() } catch { throw GitHubError.ghUnavailable }
-      process.waitUntilExit()
-      let token =
-        String(data: output.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-      let detail =
-        String(data: errors.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-      guard process.terminationStatus == 0, !token.isEmpty else {
-        throw GitHubError.notAuthenticated(detail)
-      }
-      return token
-    }.value
   }
 }
 

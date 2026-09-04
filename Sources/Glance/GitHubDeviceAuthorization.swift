@@ -29,6 +29,13 @@ struct GitHubAuthorizedIdentity: Sendable, Equatable {
   let grantedScopes: Set<String>
 }
 
+protocol GitHubDeviceAuthorizing: Sendable {
+  func requestDeviceCode() async throws -> GitHubDeviceCode
+  func waitForAuthorization(deviceCode: GitHubDeviceCode) async throws
+    -> GitHubAuthorizedIdentity
+  func refresh(credential: GitHubCredential) async throws -> GitHubAuthorizedIdentity
+}
+
 enum GitHubDeviceAuthorizationError: LocalizedError, Equatable {
   case missingClientID
   case invalidResponse
@@ -267,6 +274,8 @@ struct GitHubDeviceAuthorizationService: Sendable {
     }
   }
 }
+
+extension GitHubDeviceAuthorizationService: GitHubDeviceAuthorizing {}
 
 private enum PollResult {
   case pending

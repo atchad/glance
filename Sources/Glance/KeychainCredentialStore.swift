@@ -52,7 +52,10 @@ struct KeychainCredentialStore: CredentialSecureStore {
       throw KeychainCredentialError.unexpectedData
     }
     let query = baseQuery(account: account)
-    let attributes = [kSecValueData as String: token]
+    let attributes: [String: Any] = [
+      kSecValueData as String: token,
+      kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+    ]
     let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
     if updateStatus == errSecSuccess { return }
     guard updateStatus == errSecItemNotFound else {
@@ -60,7 +63,7 @@ struct KeychainCredentialStore: CredentialSecureStore {
     }
     var item = query
     item[kSecValueData as String] = token
-    item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+    item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
     let addStatus = SecItemAdd(item as CFDictionary, nil)
     guard addStatus == errSecSuccess else {
       throw KeychainCredentialError.operationFailed(addStatus)
@@ -113,7 +116,7 @@ struct KeychainCredentialProvider: GitHubCredentialProvider {
 
   func credential() async throws -> GitHubCredential {
     guard let credential = try store.load(account: account) else {
-      throw GitHubError.notAuthenticated("Connect Glance to GitHub in Settings.")
+      throw GitHubError.notAuthenticated("Glance is not connected directly to GitHub.")
     }
     return credential
   }
@@ -122,14 +125,14 @@ struct KeychainCredentialProvider: GitHubCredentialProvider {
 actor GitHubOAuthCredentialProvider: GitHubCredentialProvider {
   let store: any CredentialSecureStore
   let account: String
-  let authorizationService: GitHubDeviceAuthorizationService
+  let authorizationService: any GitHubDeviceAuthorizing
   let now: @Sendable () -> Date
   private var refreshTask: Task<GitHubCredential, Error>?
 
   init(
     store: any CredentialSecureStore = KeychainCredentialStore(),
     account: String = "github.com",
-    authorizationService: GitHubDeviceAuthorizationService,
+    authorizationService: any GitHubDeviceAuthorizing,
     now: @escaping @Sendable () -> Date = { Date() }
   ) {
     self.store = store

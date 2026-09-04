@@ -12,6 +12,20 @@ struct PullRequest: Codable, Identifiable, Hashable {
     case success, failure, pending, neutral, unknown
   }
 
+  struct Check: Codable, Hashable {
+    let name: String
+    let state: CheckState
+    let detailsURL: URL?
+  }
+
+  enum MergeState: String, Codable {
+    case clean, blocked, behind, conflicting, unstable, unknown
+  }
+
+  enum LifecycleState: String, Codable {
+    case open, closed, merged
+  }
+
   let id: String
   let number: Int
   let repository: String
@@ -37,9 +51,25 @@ struct PullRequest: Codable, Identifiable, Hashable {
   let hasCurrentApprovalFromOtherReviewer: Bool?
   let stackPosition: Int?
   let stackSize: Int?
+  let viewerDidAuthor: Bool?
+  let mergeState: MergeState?
+  let unresolvedConversationCount: Int?
+  let checks: [Check]?
+  let autoMergeEnabled: Bool?
+  let mergeQueuePosition: Int?
+  let lifecycleState: LifecycleState?
 
   var revisionKey: String {
     headRefOID ?? updatedAt.ISO8601Format()
+  }
+
+  static func lifecycleState(state: String?, merged: Bool?) -> LifecycleState? {
+    if merged == true { return .merged }
+    switch state {
+    case "OPEN": return .open
+    case "CLOSED": return .closed
+    default: return nil
+    }
   }
 
   func isDismissed(by revisions: [String: String]) -> Bool {
@@ -83,25 +113,130 @@ struct PullRequest: Codable, Identifiable, Hashable {
     return true
   }
 
-  var attention: PRAttention {
-    if isDraft { return .draft }
-    if checksState == .failure || reviewDecision == "CHANGES_REQUESTED" { return .blocked }
-    if !requestedReviewers.isEmpty { return .needsReview }
-    if reviewDecision == "APPROVED" && checksState == .success { return .ready }
-    return .active
+  var attention: PRAttentionSummary {
+    let authored = viewerDidAuthor == true
+    let reviewWasRerequested = reviewRequestedAt.map { requestedAt in
+      viewerReviewSubmittedAt.map { requestedAt > $0 } ?? false
+    } ?? false
+    let changedSinceReview = viewerReviewedHeadOID.map { $0 != headRefOID } ?? false
+
+    if lifecycleState == .merged {
+      return .init(level: .informational, reason: .merged, message: "Merged", priority: 950)
+    }
+    if lifecycleState == .closed {
+      return .init(level: .informational, reason: .closed, message: "Closed", priority: 960)
+    }
+    if isDraft {
+      return .init(level: .informational, reason: .draft, message: "Draft", priority: 900)
+    }
+    if !authored, reviewWasRerequested {
+      return .init(
+        level: .actionRequired, reason: .reviewRerequested,
+        message: "Review requested again", priority: 10)
+    }
+    if !authored, changedSinceReview, viewerReviewState != nil {
+      return .init(
+        level: .actionRequired, reason: .commitsSinceReview,
+        message: "New commits since your review", priority: 20)
+    }
+    if !authored, !requestedReviewers.isEmpty {
+      return .init(
+        level: .actionRequired, reason: .reviewRequested,
+        message: "Review requested", priority: 30)
+    }
+    if authored, reviewDecision == "CHANGES_REQUESTED" {
+      return .init(
+        level: .actionRequired, reason: .changesRequested,
+        message: "Changes requested", priority: 40)
+    }
+    if mergeState == .conflicting {
+      return .init(
+        level: .actionRequired, reason: .mergeConflict,
+        message: "Resolve merge conflicts", priority: 50)
+    }
+    if checksState == .failure {
+      let count = checks?.filter { $0.state == .failure }.count ?? 0
+      let message = count > 1 ? "Fix \(count) failing checks" : "Fix failing checks"
+      return .init(level: .actionRequired, reason: .checksFailing, message: message, priority: 60)
+    }
+    if let count = unresolvedConversationCount, count > 0 {
+      let noun = count == 1 ? "conversation" : "conversations"
+      let message = authored ? "Resolve \(count) \(noun)" : "\(count) unresolved \(noun)"
+      return .init(
+        level: authored ? .actionRequired : .waiting, reason: .unresolvedConversations,
+        message: message, priority: 70)
+    }
+    if mergeState == .behind {
+      return .init(
+        level: authored ? .actionRequired : .waiting, reason: .branchBehind,
+        message: "Branch is behind", priority: 80)
+    }
+    if checksState == .pending {
+      return .init(level: .waiting, reason: .checksPending, message: "Checks running", priority: 100)
+    }
+    if let position = mergeQueuePosition {
+      return .init(
+        level: .waiting, reason: .mergeQueue,
+        message: "Merge queue · position \(position)", priority: 110)
+    }
+    if autoMergeEnabled == true {
+      return .init(
+        level: .waiting, reason: .autoMerge, message: "Auto-merge enabled", priority: 120)
+    }
+    if authored, reviewDecision == "REVIEW_REQUIRED" {
+      return .init(
+        level: .waiting, reason: .waitingForReviews,
+        message: "Waiting for reviews", priority: 130)
+    }
+    if authored, reviewDecision == "APPROVED", checksState == .success,
+      mergeState == .clean || mergeState == nil
+    {
+      return .init(
+        level: .ready, reason: .readyToMerge, message: "Ready to merge", priority: 140)
+    }
+    return .init(level: .informational, reason: .active, message: "Active", priority: 800)
   }
 }
 
-enum PRAttention {
-  case blocked, needsReview, ready, draft, active
+enum PRAttentionLevel: String, Codable {
+  case actionRequired, waiting, ready, informational
 
   var color: Color {
     switch self {
-    case .blocked: .red
-    case .needsReview: .orange
+    case .actionRequired: .orange
+    case .waiting: .secondary
     case .ready: .green
-    case .draft: .secondary
-    case .active: .blue
+    case .informational: .secondary
+    }
+  }
+}
+
+enum PRAttentionReason: String, Codable {
+  case reviewRequested, reviewRerequested, commitsSinceReview, changesRequested
+  case unresolvedConversations, checksFailing, checksPending, mergeConflict, branchBehind
+  case waitingForReviews, readyToMerge, autoMerge, mergeQueue, draft, merged, closed, active
+}
+
+struct PRAttentionSummary: Equatable {
+  let level: PRAttentionLevel
+  let reason: PRAttentionReason
+  let message: String
+  let priority: Int
+}
+
+enum PRSortMode: String, Codable, CaseIterable, Identifiable {
+  case github, attention, reviewRequested, updated, created, repository, stack
+
+  var id: String { rawValue }
+  var title: String {
+    switch self {
+    case .github: "GitHub order"
+    case .attention: "Attention"
+    case .reviewRequested: "Review requested"
+    case .updated: "Recently updated"
+    case .created: "Recently created"
+    case .repository: "Repository"
+    case .stack: "Stack order"
     }
   }
 }
@@ -111,15 +246,20 @@ struct PRSection: Codable, Identifiable, Hashable {
   var name: String
   var query: String
   var isCollapsed: Bool
+  var sortMode: PRSortMode
 
-  init(id: UUID = UUID(), name: String, query: String, isCollapsed: Bool = false) {
+  init(
+    id: UUID = UUID(), name: String, query: String, isCollapsed: Bool = false,
+    sortMode: PRSortMode = .attention
+  ) {
     self.id = id
     self.name = name
     self.query = query
     self.isCollapsed = isCollapsed
+    self.sortMode = sortMode
   }
 
-  private enum CodingKeys: String, CodingKey { case id, name, query, isCollapsed }
+  private enum CodingKeys: String, CodingKey { case id, name, query, isCollapsed, sortMode }
 
   init(from decoder: Decoder) throws {
     let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -127,6 +267,7 @@ struct PRSection: Codable, Identifiable, Hashable {
     name = try values.decode(String.self, forKey: .name)
     query = try values.decode(String.self, forKey: .query)
     isCollapsed = false
+    sortMode = try values.decodeIfPresent(PRSortMode.self, forKey: .sortMode) ?? .github
   }
 
   func encode(to encoder: Encoder) throws {
@@ -134,6 +275,7 @@ struct PRSection: Codable, Identifiable, Hashable {
     try values.encode(id, forKey: .id)
     try values.encode(name, forKey: .name)
     try values.encode(query, forKey: .query)
+    try values.encode(sortMode, forKey: .sortMode)
   }
 
   static let defaults: [PRSection] = [
@@ -179,6 +321,8 @@ enum AppearanceMode: String, Codable, CaseIterable, Identifiable {
 enum MenuBarCountMode: String, Codable, CaseIterable, Identifiable {
   case none
   case awaitingReview
+  case actionRequired
+  case readyToMerge
   case openedByMe
   case allShown
 
@@ -187,6 +331,8 @@ enum MenuBarCountMode: String, Codable, CaseIterable, Identifiable {
     switch self {
     case .none: "No count"
     case .awaitingReview: "Awaiting my review"
+    case .actionRequired: "Action required"
+    case .readyToMerge: "Ready to merge"
     case .openedByMe: "Opened by me"
     case .allShown: "All PRs shown"
     }
@@ -230,6 +376,7 @@ struct Preferences: Codable {
   var showLineChanges = false
   var showCheckStatus = true
   var showReviewStatus = true
+  var showAttentionReason = true
   var statusDisplayMode: StatusDisplayMode = .compactIcons
   var timeDisplayMode: TimeDisplayMode = .created
   var commandClickDismisses = true
@@ -255,6 +402,7 @@ struct Preferences: Codable {
     case refreshInterval, appearanceMode, panelLevel, openPanelAtLaunch, openAtLogin, sections
     case menuBarCountMode, includeMyPullRequestsInMenuBarCount
     case showAuthor, showUpdatedAt, showLineChanges, showCheckStatus, showReviewStatus
+    case showAttentionReason
     case statusDisplayMode, timeDisplayMode, commandClickDismisses, notificationsEnabled
     case removePullRequestsAfterApproval, showChangedPullRequestsAfterApproval
     case removePullRequestsAfterOtherApproval
@@ -284,6 +432,8 @@ struct Preferences: Codable {
     showLineChanges = try values.decodeIfPresent(Bool.self, forKey: .showLineChanges) ?? false
     showCheckStatus = try values.decodeIfPresent(Bool.self, forKey: .showCheckStatus) ?? true
     showReviewStatus = try values.decodeIfPresent(Bool.self, forKey: .showReviewStatus) ?? true
+    showAttentionReason =
+      try values.decodeIfPresent(Bool.self, forKey: .showAttentionReason) ?? true
     statusDisplayMode =
       try values.decodeIfPresent(StatusDisplayMode.self, forKey: .statusDisplayMode)
       ?? .compactIcons
@@ -326,6 +476,7 @@ struct Preferences: Codable {
     try values.encode(showLineChanges, forKey: .showLineChanges)
     try values.encode(showCheckStatus, forKey: .showCheckStatus)
     try values.encode(showReviewStatus, forKey: .showReviewStatus)
+    try values.encode(showAttentionReason, forKey: .showAttentionReason)
     try values.encode(statusDisplayMode, forKey: .statusDisplayMode)
     try values.encode(timeDisplayMode, forKey: .timeDisplayMode)
     try values.encode(commandClickDismisses, forKey: .commandClickDismisses)

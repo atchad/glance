@@ -17,7 +17,10 @@ Glance keeps your GitHub pull requests one click away in the menu bar. Open its 
 ## What Glance does
 
 - Shows review requests, pull requests you opened, and any other sections you define with GitHub search queries.
-- Surfaces draft, review, required-check, and stacked-pull-request status without opening a browser.
+- Explains why a pull request needs attention, including review requests, new commits, failed
+  checks, unresolved conversations, merge conflicts, and merge readiness.
+- Surfaces draft, review, detailed check, merge-queue, auto-merge, and stacked-pull-request status
+  without opening a browser.
 - Displays an attention count directly in the menu bar.
 - Notifies you when a new review request arrives.
 - Lets you choose which repositories appear in the app and can generate notifications.
@@ -59,6 +62,7 @@ Glance starts with sections for pull requests requesting your review and pull re
 - Include or exclude repositories with search and bulk selection.
 - Choose which pull requests contribute to the menu-bar count, including whether review requests
   also count pull requests you opened.
+- Sort each section by attention, review-request time, recent activity, repository, or stack order.
 - Control notifications, refresh frequency, launch behavior, and panel behavior.
 - Adjust row details, including optional additions and deletions, status presentation, and
   completed-review filtering.

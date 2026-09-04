@@ -91,6 +91,18 @@ final class AppStore: ObservableObject {
     let qualifiers: [String]
     switch mode {
     case .none: return nil
+    case .actionRequired:
+      return Set(
+        snapshots.values.flatMap { $0 }
+          .filter { $0.attention.level == .actionRequired }
+          .map(\.id)
+      ).count
+    case .readyToMerge:
+      return Set(
+        snapshots.values.flatMap { $0 }
+          .filter { $0.attention.reason == .readyToMerge }
+          .map(\.id)
+      ).count
     case .awaitingReview:
       qualifiers =
         includeMyPullRequests
@@ -226,11 +238,44 @@ final class AppStore: ObservableObject {
   }
 
   func pullRequests(in section: PRSection) -> [PullRequest] {
-    (snapshots[section.id] ?? []).filter {
+    let filtered = (snapshots[section.id] ?? []).filter {
       !preferences.excludedRepositories.contains($0.repository)
         && !$0.isDismissed(by: preferences.dismissedRevisions)
         && !$0.isHiddenAfterApproval(using: preferences)
     }
+    return Self.sort(filtered, by: section.sortMode)
+  }
+
+  nonisolated static func sort(_ pullRequests: [PullRequest], by mode: PRSortMode) -> [PullRequest] {
+    guard mode != .github else { return pullRequests }
+    return pullRequests.enumerated().sorted { lhs, rhs in
+      let left = lhs.element
+      let right = rhs.element
+      switch mode {
+      case .github: return lhs.offset < rhs.offset
+      case .attention:
+        if left.attention.priority != right.attention.priority {
+          return left.attention.priority < right.attention.priority
+        }
+        if left.updatedAt != right.updatedAt { return left.updatedAt > right.updatedAt }
+      case .reviewRequested:
+        let leftDate = left.reviewRequestedAt ?? .distantPast
+        let rightDate = right.reviewRequestedAt ?? .distantPast
+        if leftDate != rightDate { return leftDate > rightDate }
+      case .updated:
+        if left.updatedAt != right.updatedAt { return left.updatedAt > right.updatedAt }
+      case .created:
+        if left.createdAt != right.createdAt { return left.createdAt > right.createdAt }
+      case .repository:
+        let comparison = left.repository.localizedStandardCompare(right.repository)
+        if comparison != .orderedSame { return comparison == .orderedAscending }
+      case .stack:
+        let leftPosition = left.stackPosition ?? Int.max
+        let rightPosition = right.stackPosition ?? Int.max
+        if leftPosition != rightPosition { return leftPosition < rightPosition }
+      }
+      return left.id < right.id
+    }.map(\.element)
   }
 
   func toggleCollapse(_ section: PRSection) {

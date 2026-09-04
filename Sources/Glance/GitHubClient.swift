@@ -165,8 +165,10 @@ struct GitHubClient {
           pageInfo { hasNextPage endCursor }
           nodes {
             ... on PullRequest {
-              id number title url headRefName headRefOid createdAt updatedAt isDraft
-              additions deletions reviewDecision
+              id number title url headRefName headRefOid createdAt updatedAt isDraft state merged
+              additions deletions reviewDecision viewerDidAuthor mergeable mergeStateStatus
+              autoMergeRequest { enabledAt }
+              mergeQueueEntry { position }
               stack { size }
               stackEntry { position }
               author { login avatarUrl }
@@ -188,6 +190,10 @@ struct GitHubClient {
                   commit { oid }
                 }
               }
+              reviewThreads(first: 100) {
+                totalCount
+                nodes { isResolved }
+              }
               timelineItems(last: 50, itemTypes: [REVIEW_REQUESTED_EVENT]) {
                 nodes {
                   ... on ReviewRequestedEvent {
@@ -200,7 +206,19 @@ struct GitHubClient {
                 }
               }
               commits(last: 1) {
-                nodes { commit { statusCheckRollup { state } } }
+                nodes {
+                  commit {
+                    statusCheckRollup {
+                      state
+                      contexts(first: 100) {
+                        nodes {
+                          ... on CheckRun { name status conclusion detailsUrl }
+                          ... on StatusContext { context state targetUrl }
+                        }
+                      }
+                    }
+                  }
+                }
               }
             }
           }
@@ -356,7 +374,27 @@ private struct RawPullRequest: Decodable {
   struct CommitConnection: Decodable { let nodes: [CommitNode] }
   struct CommitNode: Decodable { let commit: Commit }
   struct Commit: Decodable { let statusCheckRollup: Rollup? }
-  struct Rollup: Decodable { let state: String }
+  struct Rollup: Decodable {
+    struct ContextConnection: Decodable { let nodes: [Context] }
+    struct Context: Decodable {
+      let name: String?
+      let context: String?
+      let status: String?
+      let conclusion: String?
+      let state: String?
+      let detailsUrl: URL?
+      let targetUrl: URL?
+    }
+    let state: String
+    let contexts: ContextConnection?
+  }
+  struct ReviewThreadConnection: Decodable {
+    struct Thread: Decodable { let isResolved: Bool }
+    let totalCount: Int
+    let nodes: [Thread]
+  }
+  struct AutoMergeRequest: Decodable { let enabledAt: Date }
+  struct MergeQueueEntry: Decodable { let position: Int }
   struct Stack: Decodable { let size: Int }
   struct StackEntry: Decodable { let position: Int }
 
@@ -369,9 +407,16 @@ private struct RawPullRequest: Decodable {
   let createdAt: Date
   let updatedAt: Date
   let isDraft: Bool
+  let state: String?
+  let merged: Bool?
   let additions: Int
   let deletions: Int
   let reviewDecision: String?
+  let viewerDidAuthor: Bool?
+  let mergeable: String?
+  let mergeStateStatus: String?
+  let autoMergeRequest: AutoMergeRequest?
+  let mergeQueueEntry: MergeQueueEntry?
   let stack: Stack?
   let stackEntry: StackEntry?
   let author: Author?
@@ -379,19 +424,45 @@ private struct RawPullRequest: Decodable {
   let labels: LabelConnection
   let reviewRequests: ReviewRequestConnection
   let reviews: ReviewConnection
+  let reviewThreads: ReviewThreadConnection?
   let timelineItems: ReviewEventConnection
   let commits: CommitConnection
 
   func model(viewer: String) -> PullRequest {
-    let state = commits.nodes.last?.commit.statusCheckRollup?.state
+    let rollup = commits.nodes.last?.commit.statusCheckRollup
+    let checkRollupState = rollup?.state
     let checks: PullRequest.CheckState =
-      switch state {
+      switch checkRollupState {
       case "SUCCESS": .success
       case "FAILURE", "ERROR": .failure
       case "PENDING", "EXPECTED": .pending
       case "NEUTRAL": .neutral
       default: .unknown
       }
+    let detailedChecks = rollup?.contexts?.nodes.map { context in
+      let rawState = context.conclusion ?? context.state ?? context.status
+      let checkState: PullRequest.CheckState = switch rawState {
+      case "SUCCESS": .success
+      case "FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED": .failure
+      case "PENDING", "EXPECTED", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED": .pending
+      case "NEUTRAL", "SKIPPED", "STALE": .neutral
+      default: .unknown
+      }
+      return PullRequest.Check(
+        name: context.name ?? context.context ?? "Check",
+        state: checkState,
+        detailsURL: context.detailsUrl ?? context.targetUrl)
+    }
+    let normalizedMergeState: PullRequest.MergeState? = switch mergeStateStatus {
+    case "CLEAN", "HAS_HOOKS": .clean
+    case "BLOCKED": .blocked
+    case "BEHIND": .behind
+    case "DIRTY": .conflicting
+    case "UNSTABLE": .unstable
+    case nil: nil
+    default: .unknown
+    }
+    let lifecycleState = PullRequest.lifecycleState(state: self.state, merged: merged)
     let matchingRequest =
       timelineItems.nodes.last(where: { $0.requestedReviewer?.login == viewer })
       ?? timelineItems.nodes.last
@@ -420,7 +491,14 @@ private struct RawPullRequest: Decodable {
       viewerReviewedHeadOID: viewerReview?.commit?.oid,
       viewerReviewSubmittedAt: viewerReview?.submittedAt,
       hasCurrentApprovalFromOtherReviewer: hasCurrentApprovalFromOtherReviewer,
-      stackPosition: stackEntry?.position, stackSize: stack?.size
+      stackPosition: stackEntry?.position, stackSize: stack?.size,
+      viewerDidAuthor: viewerDidAuthor,
+      mergeState: normalizedMergeState,
+      unresolvedConversationCount: reviewThreads?.nodes.filter { !$0.isResolved }.count,
+      checks: detailedChecks,
+      autoMergeEnabled: autoMergeRequest != nil,
+      mergeQueuePosition: mergeQueueEntry?.position,
+      lifecycleState: lifecycleState
     )
   }
 }

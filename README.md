@@ -23,12 +23,15 @@ Glance keeps your GitHub pull requests one click away in the menu bar. Open its 
   without opening a browser.
 - Displays an attention count directly in the menu bar.
 - Notifies you when a new review request arrives.
+- Can notify you when reviews, checks, merge readiness, or merge-queue state changes.
+- Lets you pin important pull requests or snooze them until later, until checks finish, or until the pull request changes.
+- Supports local search, keyboard triage, and an optional system-wide shortcut for the panel.
 - Lets you choose which repositories appear in the app and can generate notifications.
 - Keeps the last successful results visible when GitHub is temporarily unavailable.
 - Opens at login and refreshes automatically on your preferred schedule.
 - Checks for new Glance releases and can install them automatically.
 
-Command-click a pull request to dismiss its current revision. If a new commit is pushed, the pull request returns automatically.
+Command-click a pull request to dismiss its current revision. If a new commit is pushed, the pull request returns automatically. Use a row's context menu to pin it or snooze it.
 
 ## Install
 
@@ -64,6 +67,7 @@ Glance starts with sections for pull requests requesting your review and pull re
   also count pull requests you opened.
 - Sort each section by attention, review-request time, recent activity, repository, or stack order.
 - Control notifications, refresh frequency, launch behavior, and panel behavior.
+- Choose which pull-request transitions generate notifications and configure a global panel shortcut.
 - Adjust row details, including optional additions and deletions, status presentation, and
   completed-review filtering.
 

@@ -75,7 +75,7 @@ struct GlanceSettingsView: View {
         SettingsCategoryLabel(category: category)
           .tag(category)
       }
-      .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 220)
+      .navigationSplitViewColumnWidth(min: 208, ideal: 208, max: 208)
     } detail: {
       settingsPage
         .toolbar(removing: .sidebarToggle)
@@ -135,6 +135,10 @@ private struct GeneralSettingsPage: View {
               panel.applyLevel()
             }))
           .help("Keep the detached panel in front of other windows while it is visible.")
+        Picker("Show or hide Glance", selection: $store.preferences.globalShortcut) {
+          ForEach(GlobalShortcut.allCases) { shortcut in Text(shortcut.title).tag(shortcut) }
+        }
+        .help("Choose a system-wide keyboard shortcut for the Glance panel.")
       } header: {
         Text("Window")
       } footer: {
@@ -296,11 +300,23 @@ private struct GitHubSettingsPage: View {
       }
       Section("Notifications") {
         Toggle(
-          "Notify me about new review requests",
+          "Allow pull request notifications",
           isOn: Binding(
             get: { store.preferences.notificationsEnabled },
             set: { store.setNotificationsEnabled($0) }))
-          .help("Send a native notification when a new pull request requests your review.")
+          .help("Send native notifications for the pull request events selected below.")
+        if store.preferences.notificationsEnabled {
+          ForEach(PRNotificationEvent.allCases) { event in
+            Toggle(
+              event.title,
+              isOn: Binding(
+                get: { store.preferences.notificationEvents.contains(event) },
+                set: { enabled in
+                  if enabled { store.preferences.notificationEvents.insert(event) }
+                  else { store.preferences.notificationEvents.remove(event) }
+                }))
+          }
+        }
         if store.preferences.notificationsEnabled,
           let message = store.notificationAuthorizationMessage
         {

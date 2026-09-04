@@ -355,6 +355,59 @@ enum TimeDisplayMode: String, Codable, CaseIterable, Identifiable {
   var title: String { self == .created ? "PR created" : "Review requested" }
 }
 
+enum PRNotificationEvent: String, Codable, CaseIterable, Identifiable {
+  case reviewRequested, reviewRerequested, commitsSinceReview, changesRequested
+  case checksFailed, checksRecovered, becameReady, mergeConflict, mergeQueue
+
+  var id: String { rawValue }
+  var title: String {
+    switch self {
+    case .reviewRequested: "New review requests"
+    case .reviewRerequested: "Review requests repeated"
+    case .commitsSinceReview: "New commits after my review"
+    case .changesRequested: "Changes requested"
+    case .checksFailed: "Checks failed"
+    case .checksRecovered: "Checks recovered"
+    case .becameReady: "Ready to merge"
+    case .mergeConflict: "Merge conflicts"
+    case .mergeQueue: "Merge queue changes"
+    }
+  }
+}
+
+enum SnoozeCondition: Codable, Hashable {
+  case until(Date)
+  case revisionChanges(String)
+  case checksComplete(String)
+}
+
+struct PRSnooze: Codable, Hashable {
+  let condition: SnoozeCondition
+  let createdAt: Date
+
+  func isActive(for pullRequest: PullRequest, now: Date = Date()) -> Bool {
+    switch condition {
+    case .until(let date): date > now
+    case .revisionChanges(let revision): pullRequest.revisionKey == revision
+    case .checksComplete(let revision):
+      pullRequest.revisionKey == revision && pullRequest.checksState == .pending
+    }
+  }
+}
+
+enum GlobalShortcut: String, Codable, CaseIterable, Identifiable {
+  case none, optionSpace, controlSpace, optionG
+  var id: String { rawValue }
+  var title: String {
+    switch self {
+    case .none: "Off"
+    case .optionSpace: "Option–Space"
+    case .controlSpace: "Control–Space"
+    case .optionG: "Option–G"
+    }
+  }
+}
+
 struct Preferences: Codable {
   struct ApprovalCachePolicy: Equatable {
     let removesApproved: Bool
@@ -385,8 +438,12 @@ struct Preferences: Codable {
   var showChangedPullRequestsAfterApproval = true
   var showRerequestedPullRequestsAfterApproval = true
   var notificationsEnabled = false
+  var notificationEvents: Set<PRNotificationEvent> = [.reviewRequested]
   var excludedRepositories: Set<String> = []
   var dismissedRevisions: [String: String] = [:]
+  var snoozes: [String: PRSnooze] = [:]
+  var pinnedPullRequests: Set<String> = []
+  var globalShortcut: GlobalShortcut = .none
 
   static let `default` = Preferences()
 
@@ -409,6 +466,7 @@ struct Preferences: Codable {
     case showRerequestedPullRequestsAfterApproval
     case excludedRepositories, mutedNotificationRepositories
     case dismissedRevisions
+    case notificationEvents, snoozes, pinnedPullRequests, globalShortcut
   }
 
   init() {}
@@ -452,12 +510,20 @@ struct Preferences: Codable {
       ?? true
     notificationsEnabled =
       try values.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? false
+    notificationEvents =
+      try values.decodeIfPresent(Set<PRNotificationEvent>.self, forKey: .notificationEvents)
+      ?? [.reviewRequested]
     excludedRepositories =
       try values.decodeIfPresent(Set<String>.self, forKey: .excludedRepositories)
       ?? values.decodeIfPresent(Set<String>.self, forKey: .mutedNotificationRepositories)
       ?? []
     dismissedRevisions =
       try values.decodeIfPresent([String: String].self, forKey: .dismissedRevisions) ?? [:]
+    snoozes = try values.decodeIfPresent([String: PRSnooze].self, forKey: .snoozes) ?? [:]
+    pinnedPullRequests =
+      try values.decodeIfPresent(Set<String>.self, forKey: .pinnedPullRequests) ?? []
+    globalShortcut =
+      try values.decodeIfPresent(GlobalShortcut.self, forKey: .globalShortcut) ?? .none
   }
 
   func encode(to encoder: Encoder) throws {
@@ -488,8 +554,12 @@ struct Preferences: Codable {
     try values.encode(
       showRerequestedPullRequestsAfterApproval, forKey: .showRerequestedPullRequestsAfterApproval)
     try values.encode(notificationsEnabled, forKey: .notificationsEnabled)
+    try values.encode(notificationEvents, forKey: .notificationEvents)
     try values.encode(excludedRepositories, forKey: .excludedRepositories)
     try values.encode(dismissedRevisions, forKey: .dismissedRevisions)
+    try values.encode(snoozes, forKey: .snoozes)
+    try values.encode(pinnedPullRequests, forKey: .pinnedPullRequests)
+    try values.encode(globalShortcut, forKey: .globalShortcut)
   }
 }
 

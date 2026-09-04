@@ -8,6 +8,7 @@ struct GlanceApp: App {
   @StateObject private var settingsWindow: SettingsWindowController
   @StateObject private var statusItem: StatusItemController
   @StateObject private var updates: UpdateController
+  @StateObject private var globalShortcut: GlobalShortcutController
 
   init() {
     UserDefaults.standard.register(defaults: ["NSInitialToolTipDelay": 2.0])
@@ -19,11 +20,13 @@ struct GlanceApp: App {
     panel.setOpenSettingsAction(settingsWindow.show)
     let statusItem = StatusItemController(
       store: store, panel: panel, settingsWindow: settingsWindow, updateController: updates)
+    let globalShortcut = GlobalShortcutController(store: store, action: panel.toggle)
     _store = StateObject(wrappedValue: store)
     _panel = StateObject(wrappedValue: panel)
     _settingsWindow = StateObject(wrappedValue: settingsWindow)
     _statusItem = StateObject(wrappedValue: statusItem)
     _updates = StateObject(wrappedValue: updates)
+    _globalShortcut = StateObject(wrappedValue: globalShortcut)
     DispatchQueue.main.async {
       NSApp.setActivationPolicy(.accessory)
       store.configureLoginItemAtLaunch()

@@ -9,10 +9,14 @@ struct DashboardView: View {
   var togglePanel: (() -> Void)?
   var openSettings: (() -> Void)?
   var didOpenPullRequest: (() -> Void)?
+  @State private var searchText = ""
+  @State private var selectedPullRequestID: String?
+  @FocusState private var isSearchFocused: Bool
 
   var body: some View {
     VStack(spacing: 0) {
       header
+      searchField
       Divider()
       if store.errorMessage != nil, store.snapshots.isEmpty {
         if store.connectionIssue == .authentication {
@@ -21,14 +25,21 @@ struct DashboardView: View {
           GitHubUnavailableView(store: store)
         }
       } else {
-        ScrollView {
-          LazyVStack(spacing: 0) {
-            if let error = store.errorMessage { errorBanner(error) }
-            ForEach(store.preferences.sections) { section in
-              sectionView(section)
+        ScrollViewReader { proxy in
+          ScrollView {
+            LazyVStack(spacing: 0) {
+              Color.clear.frame(height: 0).id("dashboard-top")
+              if let error = store.errorMessage { errorBanner(error) }
+              ForEach(store.preferences.sections) { section in
+                sectionView(section)
+              }
+              if !store.snoozedPullRequests.isEmpty { snoozedSection }
             }
+            .background(OverlayScrollViewConfigurator())
           }
-          .background(OverlayScrollViewConfigurator())
+          .onChange(of: searchText) { _, _ in
+            proxy.scrollTo("dashboard-top", anchor: .top)
+          }
         }
       }
       Divider()
@@ -38,6 +49,34 @@ struct DashboardView: View {
       minWidth: 310, idealWidth: surface == .menuBar ? 390 : 410, minHeight: 320, idealHeight: 590
     )
     .background(.regularMaterial)
+    .focusable()
+    .onKeyPress(.downArrow) {
+      guard !isSearchFocused else { return .ignored }
+      moveSelection(by: 1)
+      return .handled
+    }
+    .onKeyPress(.upArrow) {
+      guard !isSearchFocused else { return .ignored }
+      moveSelection(by: -1)
+      return .handled
+    }
+    .onKeyPress(.return) {
+      guard !isSearchFocused else { return .ignored }
+      return performSelected { openPullRequest($0) }
+    }
+    .onKeyPress("d") {
+      guard !isSearchFocused else { return .ignored }
+      return performSelected { store.dismiss($0) }
+    }
+    .onKeyPress("p") {
+      guard !isSearchFocused else { return .ignored }
+      return performSelected { store.togglePin($0) }
+    }
+    .onKeyPress("r") {
+      guard !isSearchFocused else { return .ignored }
+      store.refresh()
+      return .handled
+    }
     .overlay(alignment: .bottomTrailing) {
       if case .panel = surface {
         ResizeGrip()
@@ -46,6 +85,31 @@ struct DashboardView: View {
       }
     }
     .task { store.start() }
+  }
+
+  private var searchField: some View {
+    HStack(spacing: 7) {
+      Image(systemName: "magnifyingglass")
+        .foregroundStyle(.secondary)
+      TextField("Search pull requests", text: $searchText)
+        .textFieldStyle(.plain)
+        .focused($isSearchFocused)
+      if !searchText.isEmpty {
+        Button {
+          searchText = ""
+        } label: {
+          Image(systemName: "xmark.circle.fill")
+            .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .help("Clear search")
+      }
+    }
+    .padding(.horizontal, 9)
+    .frame(height: 28)
+    .background(.quaternary, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+    .padding(.horizontal, 10)
+    .padding(.bottom, 9)
   }
 
   private var header: some View {
@@ -97,7 +161,7 @@ struct DashboardView: View {
 
   @ViewBuilder
   private func sectionView(_ section: PRSection) -> some View {
-    let items = store.pullRequests(in: section)
+    let items = filtered(store.pullRequests(in: section))
     VStack(spacing: 0) {
       Button {
         store.toggleCollapse(section)
@@ -116,7 +180,9 @@ struct DashboardView: View {
       .help(section.isCollapsed ? "Show \(section.name)" : "Hide \(section.name)")
       if !section.isCollapsed {
         if items.isEmpty {
-          Text(store.isRefreshing ? "Checking…" : "No pull requests")
+          Text(
+            store.isRefreshing ? "Checking…"
+              : searchText.isEmpty ? "No pull requests" : "No matches")
             .font(.caption).foregroundStyle(.tertiary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 30).padding(.bottom, 9)
@@ -129,13 +195,79 @@ struct DashboardView: View {
                 store.open(pullRequest)
                 didOpenPullRequest?()
               },
-              dismiss: { store.dismiss(pullRequest) }
+              dismiss: { store.dismiss(pullRequest) },
+              togglePin: { store.togglePin(pullRequest) },
+              snooze: { store.snooze(pullRequest, condition: $0) },
+              isPinned: store.preferences.pinnedPullRequests.contains(pullRequest.id),
+              isSelected: selectedPullRequestID == pullRequest.id,
+              select: { selectedPullRequestID = pullRequest.id }
             )
             if pullRequest.id != items.last?.id { Divider().padding(.leading, 30) }
           }
         }
       }
     }
+  }
+
+  private var visiblePullRequests: [PullRequest] {
+    var seen: Set<String> = []
+    return store.preferences.sections.flatMap { filtered(store.pullRequests(in: $0)) }
+      .filter { seen.insert($0.id).inserted }
+  }
+
+  private var snoozedSection: some View {
+    VStack(spacing: 0) {
+      HStack {
+        Image(systemName: "clock")
+        Text("Snoozed").font(.subheadline.weight(.medium))
+        Spacer()
+        Text("\(store.snoozedPullRequests.count)").font(.caption.monospacedDigit())
+      }
+      .foregroundStyle(.secondary).padding(.horizontal, 13).padding(.vertical, 8)
+      ForEach(filtered(store.snoozedPullRequests)) { pullRequest in
+        HStack(spacing: 10) {
+          VStack(alignment: .leading, spacing: 2) {
+            Text("\(pullRequest.repository) #\(pullRequest.number)")
+              .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            Text(pullRequest.title).font(.callout).lineLimit(1)
+          }
+          Spacer()
+          Button("Wake") { store.unsnooze(pullRequest) }.buttonStyle(.borderless)
+        }
+        .padding(.horizontal, 13).padding(.vertical, 8)
+      }
+    }
+  }
+
+  private func filtered(_ pullRequests: [PullRequest]) -> [PullRequest] {
+    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !query.isEmpty else { return pullRequests }
+    return pullRequests.filter {
+      [$0.title, $0.repository, $0.author, $0.branch, "#\($0.number)", $0.attention.message]
+        .joined(separator: " ").localizedCaseInsensitiveContains(query)
+        || $0.labels.contains { $0.localizedCaseInsensitiveContains(query) }
+    }
+  }
+
+  private func moveSelection(by offset: Int) {
+    let items = visiblePullRequests
+    guard !items.isEmpty else { selectedPullRequestID = nil; return }
+    let current = selectedPullRequestID.flatMap { id in items.firstIndex { $0.id == id } }
+      ?? (offset > 0 ? -1 : 0)
+    selectedPullRequestID = items[(current + offset + items.count) % items.count].id
+  }
+
+  private func performSelected(_ action: (PullRequest) -> Void) -> KeyPress.Result {
+    guard let id = selectedPullRequestID,
+      let pullRequest = visiblePullRequests.first(where: { $0.id == id })
+    else { return .ignored }
+    action(pullRequest)
+    return .handled
+  }
+
+  private func openPullRequest(_ pullRequest: PullRequest) {
+    store.open(pullRequest)
+    didOpenPullRequest?()
   }
 
   private func errorBanner(_ message: String) -> some View {
@@ -289,6 +421,11 @@ private struct PullRequestRow: View {
   let preferences: Preferences
   let open: () -> Void
   let dismiss: () -> Void
+  let togglePin: () -> Void
+  let snooze: (SnoozeCondition) -> Void
+  let isPinned: Bool
+  let isSelected: Bool
+  let select: () -> Void
   @State private var hovering = false
 
   private var displayedDate: Date {
@@ -310,10 +447,16 @@ private struct PullRequestRow: View {
             StackBadge(position: position, size: size)
           }
           if pullRequest.isDraft { DraftBadge() }
+          if isPinned {
+            Image(systemName: "pin.fill")
+              .font(.caption2).foregroundStyle(.secondary)
+              .help("Pinned")
+              .accessibilityLabel("Pinned pull request")
+          }
         }
         Text(pullRequest.title).font(.callout).foregroundStyle(.primary).lineLimit(2)
           .multilineTextAlignment(.leading)
-        if preferences.showAttentionReason {
+        if preferences.showAttentionReason, pullRequest.attention.reason != .draft {
           AttentionReasonLabel(summary: pullRequest.attention)
         }
         HStack(spacing: 7) {
@@ -358,11 +501,14 @@ private struct PullRequestRow: View {
       .padding(.horizontal, 13).padding(.vertical, 9)
       .frame(maxWidth: .infinity, alignment: .leading)
       .contentShape(Rectangle())
-      .background(hovering ? Color.primary.opacity(0.055) : .clear)
+      .background(
+        isSelected ? Color.accentColor.opacity(0.16)
+          : hovering ? Color.primary.opacity(0.055) : .clear)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .buttonStyle(.plain)
     .onHover { hovering = $0 }
+    .simultaneousGesture(TapGesture().onEnded(select))
     .help(Text(verbatim: "Open #\(pullRequest.number) on GitHub"))
     .contextMenu {
       Button("Open on GitHub", action: open)
@@ -373,6 +519,25 @@ private struct PullRequestRow: View {
       Button("Copy Branch") {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(pullRequest.branch, forType: .string)
+      }
+      Divider()
+      Button(isPinned ? "Unpin" : "Pin", action: togglePin)
+      Menu("Snooze") {
+        Button("For 1 Hour") { snooze(.until(Date().addingTimeInterval(3_600))) }
+        Button("Until Tomorrow") {
+          snooze(.until(Calendar.current.date(byAdding: .day, value: 1, to: Date())!))
+        }
+        Button("Until Next Week") {
+          snooze(.until(Calendar.current.date(byAdding: .day, value: 7, to: Date())!))
+        }
+        Button("Until This Pull Request Changes") {
+          snooze(.revisionChanges(pullRequest.revisionKey))
+        }
+        if pullRequest.checksState == .pending {
+          Button("Until Checks Finish") {
+            snooze(.checksComplete(pullRequest.revisionKey))
+          }
+        }
       }
     }
   }

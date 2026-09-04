@@ -13,16 +13,17 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     try await center.requestAuthorization(options: [.alert, .sound])
   }
 
-  func notify(about pullRequests: [PullRequest]) {
-    for pullRequest in pullRequests {
+  func notify(about transitions: [PRTransition]) {
+    for transition in transitions {
+      let pullRequest = transition.pullRequest
       let content = UNMutableNotificationContent()
       content.title = "\(pullRequest.repository) #\(pullRequest.number)"
-      content.subtitle = "Review requested"
+      content.subtitle = transition.message
       content.body = pullRequest.title
       content.sound = .default
       content.userInfo = ["url": pullRequest.url.absoluteString]
       let request = UNNotificationRequest(
-        identifier: "review-request-\(pullRequest.id)",
+        identifier: "pull-request-\(pullRequest.id)",
         content: content,
         trigger: nil
       )

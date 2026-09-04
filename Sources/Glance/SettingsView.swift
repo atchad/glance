@@ -7,10 +7,10 @@ private enum SettingsCategory: String, CaseIterable, Identifiable {
   var title: String {
     switch self {
     case .general: "General"
-    case .reviews: "Pull Requests"
+    case .reviews: "Pull requests"
     case .github: "GitHub"
     case .sections: "Sections"
-    case .updates: "Updates"
+    case .updates: "Software Update"
     }
   }
   var symbol: String {
@@ -104,19 +104,24 @@ private struct GeneralSettingsPage: View {
     SettingsForm {
       Section("Startup") {
         Toggle(
-          "Open Glance at login",
+          "Launch Glance at login",
           isOn: Binding(
             get: { store.preferences.openAtLogin },
             set: { store.setOpenAtLogin($0) }))
+          .help("Start Glance automatically when you sign in to your Mac.")
         if let message = store.loginItemErrorMessage {
           SettingsWarning(message: message)
         }
         Toggle("Open the panel when Glance starts", isOn: $store.preferences.openPanelAtLaunch)
+          .help("Show the pull-request panel immediately after Glance launches.")
+        Text("Glance stays in the menu bar unless you choose to open the panel.")
+          .font(.caption).foregroundStyle(.secondary)
       }
       Section("Appearance") {
         Picker("Appearance", selection: $store.preferences.appearanceMode) {
           ForEach(AppearanceMode.allCases) { mode in Text(mode.title).tag(mode) }
         }
+        .help("Use the system appearance, or always use light or dark mode in Glance.")
       }
       Section("Window") {
         Toggle(
@@ -127,27 +132,9 @@ private struct GeneralSettingsPage: View {
               store.preferences.panelLevel = $0 ? .floating : .desktop
               panel.applyLevel()
             }))
-      }
-      Section("Menu Bar") {
-        Picker("Count", selection: $store.preferences.menuBarCountMode) {
-          ForEach(MenuBarCountMode.allCases) { mode in Text(mode.title).tag(mode) }
-        }
-        if store.preferences.menuBarCountMode == .awaitingReview {
-          Toggle(
-            "Include pull requests opened by me",
-            isOn: $store.preferences.includeMyPullRequestsInMenuBarCount)
-        }
-      }
-      Section("Refresh") {
-        Picker("Refresh pull requests", selection: $store.preferences.refreshInterval) {
-          Text("Every 15 seconds").tag(TimeInterval(15))
-          Text("Every 30 seconds").tag(TimeInterval(30))
-          Text("Every minute").tag(TimeInterval(60))
-          Text("Every 2 minutes").tag(TimeInterval(120))
-          Text("Every 5 minutes").tag(TimeInterval(300))
-          Text("Every 10 minutes").tag(TimeInterval(600))
-          Text("Every 15 minutes").tag(TimeInterval(900))
-        }
+          .help("Keep the detached panel in front of other windows while it is visible.")
+        Text("Keep the detached panel visible while you work in another app.")
+          .font(.caption).foregroundStyle(.secondary)
       }
     }
   }
@@ -195,23 +182,41 @@ private struct ReviewSettingsPage: View {
   @ObservedObject var store: AppStore
   var body: some View {
     SettingsForm {
-      Section("Completed Reviews") {
+      Section("Menu-bar count") {
+        Picker("Count", selection: $store.preferences.menuBarCountMode) {
+          ForEach(MenuBarCountMode.allCases) { mode in Text(mode.title).tag(mode) }
+        }
+        .help("Choose what the number beside the menu-bar icon counts.")
+        if store.preferences.menuBarCountMode == .awaitingReview {
+          Toggle(
+            "Include pull requests opened by me",
+            isOn: $store.preferences.includeMyPullRequestsInMenuBarCount)
+            .help("Include your own open pull requests in the menu-bar count.")
+        }
+        Text("Choose which pull requests contribute to the number beside the menu-bar icon.")
+          .font(.caption).foregroundStyle(.secondary)
+      }
+      Section("Completed reviews") {
         Toggle(
           "Remove pull requests after I approve them",
           isOn: $store.preferences.removePullRequestsAfterApproval)
+          .help("Hide a pull request after your approval, until it changes or you are asked to review it again.")
         Toggle(
-          "Remove pull requests after someone else approves them",
+          "Remove pull requests after another reviewer approves them",
           isOn: $store.preferences.removePullRequestsAfterOtherApproval)
+          .help("Hide a pull request after another reviewer approves the current revision.")
         Toggle(
           "Show again when new changes are pushed",
           isOn: $store.preferences.showChangedPullRequestsAfterApproval
         )
         .disabled(!store.preferences.removePullRequestsAfterApproval)
+        .help("Show an approved pull request again when its branch receives new commits.")
         Toggle(
           "Show again when my review is re-requested",
           isOn: $store.preferences.showRerequestedPullRequestsAfterApproval
         )
         .disabled(!store.preferences.removePullRequestsAfterApproval)
+        .help("Show an approved pull request again when your review is requested again.")
       }
       Section("Row Details") {
         Toggle("Author", isOn: $store.preferences.showAuthor)
@@ -228,8 +233,22 @@ private struct ReviewSettingsPage: View {
         Toggle("Review status", isOn: $store.preferences.showReviewStatus)
         Toggle("Check status", isOn: $store.preferences.showCheckStatus)
         Toggle(
-          "Command-click removes a PR until it changes",
+          "Command-click to dismiss a pull request until it changes",
           isOn: $store.preferences.commandClickDismisses)
+      }
+      Section("Refresh") {
+        Picker("Refresh pull requests", selection: $store.preferences.refreshInterval) {
+          Text("Every 15 seconds").tag(TimeInterval(15))
+          Text("Every 30 seconds").tag(TimeInterval(30))
+          Text("Every minute").tag(TimeInterval(60))
+          Text("Every 2 minutes").tag(TimeInterval(120))
+          Text("Every 5 minutes").tag(TimeInterval(300))
+          Text("Every 10 minutes").tag(TimeInterval(600))
+          Text("Every 15 minutes").tag(TimeInterval(900))
+        }
+        .help("How often Glance asks GitHub for updated pull-request data.")
+        Text("Glance keeps the last successful results visible if GitHub is temporarily unavailable.")
+          .font(.caption).foregroundStyle(.secondary)
       }
     }
   }
@@ -252,9 +271,12 @@ private struct GitHubSettingsPage: View {
       }
       Section("Repositories") {
         LabeledContent("Visible repositories") {
-          Button("Choose Repositories…") { showingRepositoryPicker = true }
+          Button("Manage repositories…") { showingRepositoryPicker = true }
+            .help("Choose which repositories appear in Glance and can send notifications.")
         }
         Text(repositorySummary).font(.caption).foregroundStyle(.secondary)
+        Text("Excluded repositories are removed from the list, cache, and notifications.")
+          .font(.caption).foregroundStyle(.secondary)
       }
       Section("Notifications") {
         Toggle(
@@ -262,6 +284,7 @@ private struct GitHubSettingsPage: View {
           isOn: Binding(
             get: { store.preferences.notificationsEnabled },
             set: { store.setNotificationsEnabled($0) }))
+          .help("Send a native notification when a new pull request requests your review.")
         if store.preferences.notificationsEnabled,
           let message = store.notificationAuthorizationMessage
         {
@@ -318,8 +341,8 @@ private struct RepositoryNotificationPicker: View {
     VStack(spacing: 0) {
       HStack {
         VStack(alignment: .leading, spacing: 2) {
-          Text("Visible Repositories").font(.headline)
-          Text("Unchecked repositories are removed from Glance and its cache.")
+          Text("Visible repositories").font(.headline)
+          Text("Unchecked repositories are removed from Glance, its cache, and notifications.")
             .font(.caption)
             .foregroundStyle(.secondary)
         }
@@ -431,6 +454,20 @@ private struct SectionSettingsView: View {
                   .font(.system(.caption, design: .monospaced))
                   .foregroundStyle(.secondary)
               }
+              VStack(spacing: 2) {
+                Button { moveSection(id: section.id, offset: -1) } label: {
+                  Image(systemName: "chevron.up")
+                }
+                .buttonStyle(.borderless)
+                .disabled(store.preferences.sections.first?.id == section.id)
+                .help("Move section up")
+                Button { moveSection(id: section.id, offset: 1) } label: {
+                  Image(systemName: "chevron.down")
+                }
+                .buttonStyle(.borderless)
+                .disabled(store.preferences.sections.last?.id == section.id)
+                .help("Move section down")
+              }
               Button {
                 store.preferences.sections.removeAll { $0.id == section.id }
                 store.refresh()
@@ -450,7 +487,7 @@ private struct SectionSettingsView: View {
       Divider()
 
       VStack(alignment: .leading, spacing: 10) {
-        Text("Add a Section")
+        Text("Add section")
           .font(.headline)
         HStack(spacing: 8) {
           TextField("Section name", text: $draftName)
@@ -521,5 +558,13 @@ private struct SectionSettingsView: View {
       Label(message, systemImage: "exclamationmark.triangle.fill")
         .font(.caption).foregroundStyle(.red)
     }
+  }
+
+  private func moveSection(id: UUID, offset: Int) {
+    guard let index = store.preferences.sections.firstIndex(where: { $0.id == id }) else { return }
+    let destination = index + offset
+    guard store.preferences.sections.indices.contains(destination) else { return }
+    store.preferences.sections.swapAt(index, destination)
+    store.refresh()
   }
 }

@@ -58,7 +58,7 @@ final class ModelsTests: XCTestCase {
     XCTAssertTrue(preferences.showChangedPullRequestsAfterApproval)
     XCTAssertTrue(preferences.showRerequestedPullRequestsAfterApproval)
     XCTAssertTrue(preferences.openAtLogin)
-    XCTAssertTrue(preferences.notificationsEnabled)
+    XCTAssertFalse(preferences.notificationsEnabled)
     XCTAssertTrue(preferences.excludedRepositories.isEmpty)
   }
 

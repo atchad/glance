@@ -237,7 +237,7 @@ struct Preferences: Codable {
   var removePullRequestsAfterOtherApproval = false
   var showChangedPullRequestsAfterApproval = true
   var showRerequestedPullRequestsAfterApproval = true
-  var notificationsEnabled = true
+  var notificationsEnabled = false
   var excludedRepositories: Set<String> = []
   var dismissedRevisions: [String: String] = [:]
 
@@ -301,7 +301,7 @@ struct Preferences: Codable {
       try values.decodeIfPresent(Bool.self, forKey: .showRerequestedPullRequestsAfterApproval)
       ?? true
     notificationsEnabled =
-      try values.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? true
+      try values.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? false
     excludedRepositories =
       try values.decodeIfPresent(Set<String>.self, forKey: .excludedRepositories)
       ?? values.decodeIfPresent(Set<String>.self, forKey: .mutedNotificationRepositories)

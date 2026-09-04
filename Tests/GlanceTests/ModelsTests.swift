@@ -183,6 +183,56 @@ final class ModelsTests: XCTestCase {
       ["a", "b", "waiting"])
   }
 
+  func testLegacyPreferencesPreserveOnlyExistingReviewNotifications() throws {
+    let preferences = try JSONDecoder().decode(Preferences.self, from: Data(#"{"notificationsEnabled":true}"#.utf8))
+    XCTAssertEqual(preferences.notificationEvents, [.reviewRequested])
+    XCTAssertTrue(preferences.snoozes.isEmpty)
+    XCTAssertTrue(preferences.pinnedPullRequests.isEmpty)
+    XCTAssertEqual(preferences.globalShortcut, .none)
+  }
+
+  func testSnoozeConditionsWakeAtTheExpectedTransition() {
+    let pending = makePullRequest(id: "pr", checks: .pending, headRefOID: "one")
+    XCTAssertTrue(PRSnooze(condition: .revisionChanges("one"), createdAt: .now).isActive(for: pending))
+    XCTAssertFalse(PRSnooze(condition: .revisionChanges("old"), createdAt: .now).isActive(for: pending))
+    XCTAssertTrue(PRSnooze(condition: .checksComplete("one"), createdAt: .now).isActive(for: pending))
+    let passed = makePullRequest(id: "pr", checks: .success, headRefOID: "one")
+    XCTAssertFalse(PRSnooze(condition: .checksComplete("one"), createdAt: .now).isActive(for: passed))
+    XCTAssertFalse(PRSnooze(condition: .until(.distantPast), createdAt: .now).isActive(for: pending))
+  }
+
+  func testTransitionDetectorDoesNotRepeatUnchangedState() {
+    let pullRequest = makePullRequest(id: "pr", checks: .failure, viewerDidAuthor: true)
+    XCTAssertTrue(PRTransition.detect(previous: [pullRequest], current: [pullRequest]).isEmpty)
+  }
+
+  func testTransitionDetectorFindsFailureRecoveryAndReadiness() {
+    let failing = makePullRequest(id: "pr", checks: .failure, viewerDidAuthor: true)
+    let passed = makePullRequest(id: "pr", checks: .success, viewerDidAuthor: true)
+    XCTAssertEqual(PRTransition.detect(previous: [failing], current: [passed]).map(\.event), [.checksRecovered])
+
+    let ready = makePullRequest(
+      id: "pr", checks: .success, reviewDecision: "APPROVED",
+      viewerDidAuthor: true, mergeState: .clean)
+    XCTAssertEqual(PRTransition.detect(previous: [passed], current: [ready]).map(\.event), [.becameReady])
+  }
+
+  func testTransitionDetectorCoalescesToOneEventPerPullRequestRefresh() {
+    let old = makePullRequest(id: "pr", checks: .pending, viewerDidAuthor: true)
+    let failed = makePullRequest(id: "pr", checks: .failure, viewerDidAuthor: true, mergeState: .conflicting)
+    let events = PRTransition.detect(previous: [old], current: [failed])
+    XCTAssertEqual(events.count, 1)
+    XCTAssertEqual(events.first?.event, .mergeConflict)
+  }
+
+  func testNewReviewRequestIsDetectedWithoutNotifyingForOtherNewPRs() {
+    let requested = makePullRequest(id: "review", reviewers: ["atchad"])
+    let authored = makePullRequest(id: "mine", viewerDidAuthor: true)
+    XCTAssertEqual(
+      PRTransition.detect(previous: [], current: [requested, authored]).map(\.event),
+      [.reviewRequested])
+  }
+
   func testAllVendoredOcticonsLoad() {
     for icon in Octicon.allCases {
       XCTAssertNotNil(

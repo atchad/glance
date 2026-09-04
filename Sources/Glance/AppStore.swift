@@ -209,10 +209,10 @@ final class AppStore: ObservableObject {
           from: fetchedSnapshots,
           excluded: preferences.excludedRepositories
         )
-        let notifications =
-          hasNotificationBaseline
-          ? Self.newReviewRequests(previous: snapshots, next: nextSnapshots, sections: sections)
-          : []
+        let previousUnique = Self.uniquePullRequests(in: snapshots)
+        let nextUnique = Self.uniquePullRequests(in: nextSnapshots)
+        let transitions = hasNotificationBaseline
+          ? PRTransition.detect(previous: previousUnique, current: nextUnique) : []
         snapshots = nextSnapshots
         hasNotificationBaseline = true
         let activeIDs = Set(nextSnapshots.values.flatMap { $0.map(\.id) })
@@ -222,11 +222,16 @@ final class AppStore: ObservableObject {
         if retainedDismissals != preferences.dismissedRevisions {
           preferences.dismissedRevisions = retainedDismissals
         }
+        preferences.snoozes = preferences.snoozes.filter { id, snooze in
+          guard let pullRequest = nextUnique.first(where: { $0.id == id }) else { return false }
+          return snooze.isActive(for: pullRequest)
+        }
+        preferences.pinnedPullRequests.formIntersection(activeIDs)
         if !result.viewer.isEmpty { viewerLogin = result.viewer }
         lastUpdated = Date()
         isRefreshing = false
         saveCache()
-        sendNotifications(for: notifications)
+        sendNotifications(for: transitions)
       } catch is CancellationError {
         self?.isRefreshing = false
       } catch {
@@ -241,9 +246,15 @@ final class AppStore: ObservableObject {
     let filtered = (snapshots[section.id] ?? []).filter {
       !preferences.excludedRepositories.contains($0.repository)
         && !$0.isDismissed(by: preferences.dismissedRevisions)
-        && !$0.isHiddenAfterApproval(using: preferences)
+        && !isSnoozed($0)
+        && (preferences.pinnedPullRequests.contains($0.id)
+          || !$0.isHiddenAfterApproval(using: preferences))
     }
-    return Self.sort(filtered, by: section.sortMode)
+    return Self.sort(filtered, by: section.sortMode).enumerated().sorted { left, right in
+      let leftPinned = preferences.pinnedPullRequests.contains(left.element.id)
+      let rightPinned = preferences.pinnedPullRequests.contains(right.element.id)
+      return leftPinned == rightPinned ? left.offset < right.offset : leftPinned
+    }.map(\.element)
   }
 
   nonisolated static func sort(_ pullRequests: [PullRequest], by mode: PRSortMode) -> [PullRequest] {
@@ -289,6 +300,33 @@ final class AppStore: ObservableObject {
 
   func dismiss(_ pullRequest: PullRequest) {
     preferences.dismissedRevisions[pullRequest.id] = pullRequest.revisionKey
+  }
+
+  func togglePin(_ pullRequest: PullRequest) {
+    if preferences.pinnedPullRequests.contains(pullRequest.id) {
+      preferences.pinnedPullRequests.remove(pullRequest.id)
+    } else {
+      preferences.pinnedPullRequests.insert(pullRequest.id)
+      preferences.snoozes.removeValue(forKey: pullRequest.id)
+    }
+  }
+
+  func snooze(_ pullRequest: PullRequest, condition: SnoozeCondition) {
+    preferences.snoozes[pullRequest.id] = PRSnooze(condition: condition, createdAt: Date())
+    preferences.pinnedPullRequests.remove(pullRequest.id)
+  }
+
+  func unsnooze(_ pullRequest: PullRequest) {
+    preferences.snoozes.removeValue(forKey: pullRequest.id)
+  }
+
+  func isSnoozed(_ pullRequest: PullRequest, now: Date = Date()) -> Bool {
+    preferences.snoozes[pullRequest.id]?.isActive(for: pullRequest, now: now) == true
+  }
+
+  var snoozedPullRequests: [PullRequest] {
+    Self.uniquePullRequests(in: snapshots).filter { isSnoozed($0) }
+      .sorted { $0.updatedAt > $1.updatedAt }
   }
 
   func validateSectionQuery(_ query: String) async -> String? {
@@ -341,12 +379,20 @@ final class AppStore: ObservableObject {
     }
   }
 
-  private func sendNotifications(for pullRequests: [PullRequest]) {
+  private func sendNotifications(for transitions: [PRTransition]) {
     guard preferences.notificationsEnabled else { return }
-    let allowed = pullRequests.filter {
-      !preferences.excludedRepositories.contains($0.repository)
+    let allowed = transitions.filter {
+      preferences.notificationEvents.contains($0.event)
+        && !preferences.excludedRepositories.contains($0.pullRequest.repository)
+        && !isSnoozed($0.pullRequest)
     }
     notificationManager.notify(about: allowed)
+  }
+
+  nonisolated static func uniquePullRequests(in snapshots: [UUID: [PullRequest]]) -> [PullRequest] {
+    var unique: [String: PullRequest] = [:]
+    for pullRequest in snapshots.values.flatMap({ $0 }) { unique[pullRequest.id] = pullRequest }
+    return Array(unique.values)
   }
 
   private func applyLoginItemPreference(_ enabled: Bool) {

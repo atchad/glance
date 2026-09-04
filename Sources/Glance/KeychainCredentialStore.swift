@@ -52,7 +52,10 @@ struct KeychainCredentialStore: CredentialSecureStore {
       throw KeychainCredentialError.unexpectedData
     }
     let query = baseQuery(account: account)
-    let attributes = [kSecValueData as String: token]
+    let attributes: [String: Any] = [
+      kSecValueData as String: token,
+      kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+    ]
     let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
     if updateStatus == errSecSuccess { return }
     guard updateStatus == errSecItemNotFound else {

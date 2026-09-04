@@ -5,13 +5,59 @@ import XCTest
 
 final class ModelsTests: XCTestCase {
   func testBlockedAttentionWinsForFailedChecks() {
-    let pullRequest = makePullRequest(checks: .failure, reviewers: ["atchad"])
-    XCTAssertEqual(String(describing: pullRequest.attention), "blocked")
+    let pullRequest = makePullRequest(checks: .failure, viewerDidAuthor: true)
+    XCTAssertEqual(pullRequest.attention.reason, .checksFailing)
+    XCTAssertEqual(pullRequest.attention.level, .actionRequired)
   }
 
   func testRequestedReviewNeedsAttention() {
     let pullRequest = makePullRequest(checks: .success, reviewers: ["atchad"])
-    XCTAssertEqual(String(describing: pullRequest.attention), "needsReview")
+    XCTAssertEqual(pullRequest.attention.reason, .reviewRequested)
+    XCTAssertEqual(pullRequest.attention.message, "Review requested")
+  }
+
+  func testAuthorDoesNotInheritAnotherReviewersRequest() {
+    let pullRequest = makePullRequest(
+      checks: .success, reviewers: ["reviewer"], viewerDidAuthor: true)
+    XCTAssertEqual(pullRequest.attention.reason, .active)
+  }
+
+  func testRerequestedReviewWinsOverNewCommits() {
+    let pullRequest = makePullRequest(
+      reviewers: ["atchad"], headRefOID: "new", reviewRequestedAt: Date(timeIntervalSince1970: 3),
+      viewerReviewState: "APPROVED", viewerReviewedHeadOID: "old",
+      viewerReviewSubmittedAt: Date(timeIntervalSince1970: 2))
+    XCTAssertEqual(pullRequest.attention.reason, .reviewRerequested)
+  }
+
+  func testReadyToMergeRequiresAuthoredCleanPullRequest() {
+    let pullRequest = makePullRequest(
+      checks: .success, reviewDecision: "APPROVED", viewerDidAuthor: true, mergeState: .clean)
+    XCTAssertEqual(pullRequest.attention.reason, .readyToMerge)
+    XCTAssertEqual(pullRequest.attention.level, .ready)
+  }
+
+  func testFailingCheckMessageIncludesCount() {
+    let pullRequest = makePullRequest(
+      checks: .failure, viewerDidAuthor: true,
+      detailedChecks: [
+        .init(name: "test", state: .failure, detailsURL: nil),
+        .init(name: "lint", state: .failure, detailsURL: nil),
+      ])
+    XCTAssertEqual(pullRequest.attention.message, "Fix 2 failing checks")
+  }
+
+  func testMergedPullRequestIsNeverActionableFromStaleChecks() {
+    let pullRequest = makePullRequest(
+      checks: .failure, viewerDidAuthor: true, lifecycleState: .merged)
+    XCTAssertEqual(pullRequest.attention.reason, .merged)
+    XCTAssertEqual(pullRequest.attention.level, .informational)
+  }
+
+  func testLifecycleUsesPullRequestStateIndependentlyOfCheckState() {
+    XCTAssertEqual(PullRequest.lifecycleState(state: "CLOSED", merged: false), .closed)
+    XCTAssertEqual(PullRequest.lifecycleState(state: "OPEN", merged: false), .open)
+    XCTAssertEqual(PullRequest.lifecycleState(state: "OPEN", merged: true), .merged)
   }
 
   func testDefaultSectionsCoverPrimaryWorkflows() {
@@ -29,9 +75,11 @@ final class ModelsTests: XCTestCase {
       #"{"id":"\#(id.uuidString)","name":"For Review","query":"is:pr","isCollapsed":true}"#
     let section = try JSONDecoder().decode(PRSection.self, from: Data(json.utf8))
     XCTAssertFalse(section.isCollapsed)
+    XCTAssertEqual(section.sortMode, .github)
 
     let encoded = String(decoding: try JSONEncoder().encode(section), as: UTF8.self)
     XCTAssertFalse(encoded.contains("isCollapsed"))
+    XCTAssertTrue(encoded.contains("sortMode"))
   }
 
   func testFreshTimestampUsesNaturalCopy() {
@@ -50,6 +98,7 @@ final class ModelsTests: XCTestCase {
     XCTAssertFalse(preferences.showLineChanges)
     XCTAssertTrue(preferences.showCheckStatus)
     XCTAssertTrue(preferences.showReviewStatus)
+    XCTAssertTrue(preferences.showAttentionReason)
     XCTAssertEqual(preferences.statusDisplayMode, .compactIcons)
     XCTAssertEqual(preferences.timeDisplayMode, .created)
     XCTAssertTrue(preferences.commandClickDismisses)
@@ -101,6 +150,37 @@ final class ModelsTests: XCTestCase {
       AppStore.calculateMenuBarCount(
         mode: .none, includeMyPullRequests: true,
         sections: [reviewSection, mineSection], snapshots: snapshots))
+  }
+
+  @MainActor
+  func testAttentionAwareMenuBarCountsDeduplicatePullRequests() {
+    let section = PRSection(name: "All", query: "is:pr")
+    let action = makePullRequest(id: "action", reviewers: ["atchad"])
+    let ready = makePullRequest(
+      id: "ready", checks: .success, reviewDecision: "APPROVED",
+      viewerDidAuthor: true, mergeState: .clean)
+    let snapshots = [section.id: [action, ready, action]]
+
+    XCTAssertEqual(
+      AppStore.calculateMenuBarCount(
+        mode: .actionRequired, includeMyPullRequests: false,
+        sections: [section], snapshots: snapshots),
+      1)
+    XCTAssertEqual(
+      AppStore.calculateMenuBarCount(
+        mode: .readyToMerge, includeMyPullRequests: false,
+        sections: [section], snapshots: snapshots),
+      1)
+  }
+
+  func testAttentionSortingIsStableAndPrioritizesAction() {
+    let oldAction = makePullRequest(id: "b", reviewers: ["atchad"], updatedAt: .distantPast)
+    let newAction = makePullRequest(id: "a", reviewers: ["atchad"], updatedAt: .now)
+    let waiting = makePullRequest(id: "waiting", checks: .pending, viewerDidAuthor: true)
+
+    XCTAssertEqual(
+      AppStore.sort([waiting, oldAction, newAction], by: .attention).map(\.id),
+      ["a", "b", "waiting"])
   }
 
   func testAllVendoredOcticonsLoad() {
@@ -296,20 +376,32 @@ final class ModelsTests: XCTestCase {
     viewerReviewState: String? = nil,
     viewerReviewedHeadOID: String? = nil,
     viewerReviewSubmittedAt: Date? = nil,
-    hasCurrentApprovalFromOtherReviewer: Bool = false
+    hasCurrentApprovalFromOtherReviewer: Bool = false,
+    updatedAt: Date = .now,
+    reviewDecision: String? = nil,
+    viewerDidAuthor: Bool? = false,
+    mergeState: PullRequest.MergeState? = nil,
+    unresolvedConversationCount: Int? = 0,
+    detailedChecks: [PullRequest.Check]? = nil,
+    autoMergeEnabled: Bool? = false,
+    mergeQueuePosition: Int? = nil,
+    lifecycleState: PullRequest.LifecycleState? = .open
   ) -> PullRequest {
     PullRequest(
       id: id, number: 1, repository: repository, title: "Test", author: "author",
       authorAvatarURL: nil, url: URL(string: "https://github.com/owner/repo/pull/1")!,
       branch: "feature", headRefOID: headRefOID,
-      createdAt: .now, reviewRequestedAt: reviewRequestedAt, updatedAt: .now, isDraft: false,
-      reviewDecision: nil,
+      createdAt: .now, reviewRequestedAt: reviewRequestedAt, updatedAt: updatedAt, isDraft: false,
+      reviewDecision: reviewDecision,
       checksState: checks,
       additions: 1, deletions: 0, labels: [], requestedReviewers: reviewers,
       viewerReviewState: viewerReviewState, viewerReviewedHeadOID: viewerReviewedHeadOID,
       viewerReviewSubmittedAt: viewerReviewSubmittedAt,
       hasCurrentApprovalFromOtherReviewer: hasCurrentApprovalFromOtherReviewer,
-      stackPosition: nil, stackSize: nil
+      stackPosition: nil, stackSize: nil, viewerDidAuthor: viewerDidAuthor,
+      mergeState: mergeState, unresolvedConversationCount: unresolvedConversationCount,
+      checks: detailedChecks, autoMergeEnabled: autoMergeEnabled,
+      mergeQueuePosition: mergeQueuePosition, lifecycleState: lifecycleState
     )
   }
 }

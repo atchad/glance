@@ -313,6 +313,9 @@ private struct PullRequestRow: View {
         }
         Text(pullRequest.title).font(.callout).foregroundStyle(.primary).lineLimit(2)
           .multilineTextAlignment(.leading)
+        if preferences.showAttentionReason {
+          AttentionReasonLabel(summary: pullRequest.attention)
+        }
         HStack(spacing: 7) {
           if preferences.showAuthor {
             AvatarView(url: pullRequest.authorAvatarURL)
@@ -417,6 +420,44 @@ private struct PullRequestRow: View {
     default:
       EmptyView()
     }
+  }
+}
+
+private struct AttentionReasonLabel: View {
+  let summary: PRAttentionSummary
+
+  private var symbol: String {
+    switch summary.reason {
+    case .reviewRequested, .reviewRerequested, .commitsSinceReview: "person.crop.circle.badge.clock"
+    case .changesRequested, .checksFailing, .mergeConflict: "exclamationmark.circle.fill"
+    case .unresolvedConversations: "bubble.left.and.exclamationmark.bubble.right"
+    case .checksPending: "clock"
+    case .branchBehind: "arrow.triangle.branch"
+    case .waitingForReviews: "person.2"
+    case .readyToMerge: "checkmark.circle.fill"
+    case .autoMerge: "arrow.triangle.merge"
+    case .mergeQueue: "text.line.first.and.arrowtriangle.forward"
+    case .draft: "pencil.circle"
+    case .merged: "arrow.triangle.merge"
+    case .closed: "xmark.circle"
+    case .active: "circle.fill"
+    }
+  }
+
+  private var color: Color {
+    switch summary.reason {
+    case .changesRequested, .checksFailing, .mergeConflict: .red
+    default: summary.level.color
+    }
+  }
+
+  var body: some View {
+    Label(summary.message, systemImage: symbol)
+      .font(.caption2.weight(.medium))
+      .foregroundStyle(color)
+      .lineLimit(1)
+      .help(summary.message)
+      .accessibilityLabel("Attention status: \(summary.message)")
   }
 }
 

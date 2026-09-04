@@ -102,7 +102,7 @@ private struct GeneralSettingsPage: View {
   @ObservedObject var panel: FloatingPanelController
   var body: some View {
     SettingsForm {
-      Section("Startup") {
+      Section {
         Toggle(
           "Launch Glance at login",
           isOn: Binding(
@@ -114,8 +114,10 @@ private struct GeneralSettingsPage: View {
         }
         Toggle("Open the panel when Glance starts", isOn: $store.preferences.openPanelAtLaunch)
           .help("Show the pull-request panel immediately after Glance launches.")
+      } header: {
+        Text("Startup")
+      } footer: {
         Text("Glance stays in the menu bar unless you choose to open the panel.")
-          .font(.caption).foregroundStyle(.secondary)
       }
       Section("Appearance") {
         Picker("Appearance", selection: $store.preferences.appearanceMode) {
@@ -123,7 +125,7 @@ private struct GeneralSettingsPage: View {
         }
         .help("Use the system appearance, or always use light or dark mode in Glance.")
       }
-      Section("Window") {
+      Section {
         Toggle(
           "Keep the panel above other windows",
           isOn: Binding(
@@ -133,8 +135,10 @@ private struct GeneralSettingsPage: View {
               panel.applyLevel()
             }))
           .help("Keep the detached panel in front of other windows while it is visible.")
+      } header: {
+        Text("Window")
+      } footer: {
         Text("Keep the detached panel visible while you work in another app.")
-          .font(.caption).foregroundStyle(.secondary)
       }
     }
   }
@@ -182,7 +186,7 @@ private struct ReviewSettingsPage: View {
   @ObservedObject var store: AppStore
   var body: some View {
     SettingsForm {
-      Section("Menu-bar count") {
+      Section {
         Picker("Count", selection: $store.preferences.menuBarCountMode) {
           ForEach(MenuBarCountMode.allCases) { mode in Text(mode.title).tag(mode) }
         }
@@ -193,8 +197,10 @@ private struct ReviewSettingsPage: View {
             isOn: $store.preferences.includeMyPullRequestsInMenuBarCount)
             .help("Include your own open pull requests in the menu-bar count.")
         }
+      } header: {
+        Text("Menu-bar count")
+      } footer: {
         Text("Choose which pull requests contribute to the number beside the menu-bar icon.")
-          .font(.caption).foregroundStyle(.secondary)
       }
       Section("Completed reviews") {
         Toggle(
@@ -227,6 +233,8 @@ private struct ReviewSettingsPage: View {
           }
         }
         Toggle("Additions and deletions", isOn: $store.preferences.showLineChanges)
+        Toggle("Attention reason", isOn: $store.preferences.showAttentionReason)
+          .help("Show why each pull request needs attention or what it is waiting for.")
         Picker("Status layout", selection: $store.preferences.statusDisplayMode) {
           ForEach(StatusDisplayMode.allCases) { mode in Text(mode.title).tag(mode) }
         }
@@ -236,7 +244,7 @@ private struct ReviewSettingsPage: View {
           "Command-click to dismiss a pull request until it changes",
           isOn: $store.preferences.commandClickDismisses)
       }
-      Section("Refresh") {
+      Section {
         Picker("Refresh pull requests", selection: $store.preferences.refreshInterval) {
           Text("Every 15 seconds").tag(TimeInterval(15))
           Text("Every 30 seconds").tag(TimeInterval(30))
@@ -247,8 +255,10 @@ private struct ReviewSettingsPage: View {
           Text("Every 15 minutes").tag(TimeInterval(900))
         }
         .help("How often Glance asks GitHub for updated pull-request data.")
+      } header: {
+        Text("Refresh")
+      } footer: {
         Text("Glance keeps the last successful results visible if GitHub is temporarily unavailable.")
-          .font(.caption).foregroundStyle(.secondary)
       }
     }
   }
@@ -269,14 +279,20 @@ private struct GitHubSettingsPage: View {
           }
         }
       }
-      Section("Repositories") {
-        LabeledContent("Visible repositories") {
+      Section {
+        LabeledContent {
           Button("Manage repositories…") { showingRepositoryPicker = true }
             .help("Choose which repositories appear in Glance and can send notifications.")
+        } label: {
+          VStack(alignment: .leading, spacing: 2) {
+            Text("Visible repositories")
+            Text(repositorySummary).font(.caption).foregroundStyle(.secondary)
+          }
         }
-        Text(repositorySummary).font(.caption).foregroundStyle(.secondary)
+      } header: {
+        Text("Repositories")
+      } footer: {
         Text("Excluded repositories are removed from the list, cache, and notifications.")
-          .font(.caption).foregroundStyle(.secondary)
       }
       Section("Notifications") {
         Toggle(
@@ -453,6 +469,13 @@ private struct SectionSettingsView: View {
                   .textFieldStyle(.plain)
                   .font(.system(.caption, design: .monospaced))
                   .foregroundStyle(.secondary)
+                Picker("Sort", selection: $section.sortMode) {
+                  ForEach(PRSortMode.allCases) { mode in Text(mode.title).tag(mode) }
+                }
+                .labelsHidden()
+                .controlSize(.small)
+                .frame(maxWidth: 170, alignment: .leading)
+                .help("Choose how pull requests in this section are ordered.")
               }
               VStack(spacing: 2) {
                 Button { moveSection(id: section.id, offset: -1) } label: {

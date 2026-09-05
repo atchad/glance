@@ -26,18 +26,35 @@ final class AppStore: ObservableObject {
       if oldValue.appearanceMode != preferences.appearanceMode {
         Self.applyAppearance(preferences.appearanceMode)
       }
-      if oldValue.approvalCachePolicy != preferences.approvalCachePolicy { saveCache() }
+      if oldValue.approvalCachePolicy != preferences.approvalCachePolicy
+        || oldValue.pinnedPullRequests != preferences.pinnedPullRequests
+        || oldValue.excludedRepositories != preferences.excludedRepositories
+      { saveCache() }
     }
   }
 
   private let client = GitHubClient()
-  private let notificationManager = NotificationManager()
+  private lazy var notificationManager = NotificationManager()
+  private let fetchSnapshots: ([PRSection]) async throws -> (
+    viewer: String, snapshots: [SectionSnapshot]
+  )
+  private let preferencesURL: URL
+  private let cacheURL: URL
   private var refreshTask: Task<Void, Never>?
   private var timerTask: Task<Void, Never>?
   private var hasNotificationBaseline = false
 
-  init() {
-    var loaded = Self.load(Preferences.self, from: Self.preferencesURL) ?? .default
+  init(
+    storageDirectory: URL? = nil,
+    fetchSnapshots: @escaping ([PRSection]) async throws -> (
+      viewer: String, snapshots: [SectionSnapshot]
+    ) = { try await GitHubClient().fetchAll(sections: $0) }
+  ) {
+    let directory = storageDirectory ?? Self.supportDirectory
+    preferencesURL = directory.appending(path: "preferences.json")
+    cacheURL = directory.appending(path: "cache.json")
+    self.fetchSnapshots = fetchSnapshots
+    var loaded = Self.load(Preferences.self, from: preferencesURL) ?? .default
     for index in loaded.sections.indices {
       switch loaded.sections[index].name {
       case "Needs My Review": loaded.sections[index].name = "For Review"
@@ -55,7 +72,7 @@ final class AppStore: ObservableObject {
     }
     preferences = loaded
     Self.applyAppearance(loaded.appearanceMode)
-    if let cache = Self.load(GlanceCache.self, from: Self.cacheURL) {
+    if let cache = Self.load(GlanceCache.self, from: cacheURL) {
       let cachedSnapshots = Dictionary(
         uniqueKeysWithValues: cache.snapshots.map { ($0.id, $0.pullRequests) })
       snapshots = Self.removingExcludedRepositories(
@@ -119,6 +136,7 @@ final class AppStore: ObservableObject {
 
   func start() {
     guard timerTask == nil else { return }
+    _ = notificationManager
     configureNotifications()
     refresh()
     timerTask = Task { [weak self] in
@@ -201,7 +219,7 @@ final class AppStore: ObservableObject {
     let sections = preferences.sections
     refreshTask = Task { [weak self] in
       do {
-        let result = try await self?.client.fetchAll(sections: sections)
+        let result = try await self?.fetchSnapshots(sections)
         guard let self, let result else { return }
         let fetchedSnapshots = Dictionary(
           uniqueKeysWithValues: result.snapshots.map { ($0.id, $0.pullRequests) })
@@ -428,7 +446,7 @@ final class AppStore: ObservableObject {
     return Set(matchingIDs).count
   }
 
-  private func savePreferences() { Self.save(preferences, to: Self.preferencesURL) }
+  private func savePreferences() { Self.save(preferences, to: preferencesURL) }
 
   private func saveCache() {
     let cache = GlanceCache(
@@ -437,11 +455,13 @@ final class AppStore: ObservableObject {
         SectionSnapshot(
           id: $0.id,
           pullRequests: (snapshots[$0.id] ?? []).filter {
-            !$0.isHiddenAfterApproval(using: preferences)
+            !preferences.excludedRepositories.contains($0.repository)
+              && (preferences.pinnedPullRequests.contains($0.id)
+                || !$0.isHiddenAfterApproval(using: preferences))
           })
       }
     )
-    Self.save(cache, to: Self.cacheURL)
+    Self.save(cache, to: cacheURL)
   }
 
   private static var supportDirectory: URL {
@@ -450,8 +470,6 @@ final class AppStore: ObservableObject {
     try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     return directory
   }
-  private static var preferencesURL: URL { supportDirectory.appending(path: "preferences.json") }
-  private static var cacheURL: URL { supportDirectory.appending(path: "cache.json") }
 
   private static func load<T: Decodable>(_ type: T.Type, from url: URL) -> T? {
     guard let data = try? Data(contentsOf: url) else { return nil }

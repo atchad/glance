@@ -25,7 +25,7 @@ Glance keeps your GitHub pull requests one click away in the menu bar. Open its 
 - Notifies you when a new review request arrives.
 - Can notify you when reviews, checks, merge readiness, or merge-queue state changes.
 - Lets you pin important pull requests or snooze them until later, until checks finish, or until the pull request changes.
-- Supports local search, keyboard triage, and an optional system-wide shortcut for the panel.
+- Supports local search, keyboard triage, and an optional system-wide shortcut for the panel. J/K or arrows traverse expanded search results; Return opens, D dismisses, and P toggles a pin on the selected row. Duplicate PRs are visited in section order. Hiding a selected row clears selection. Slash focuses search, where normal text editing takes precedence.
 - Lets you choose which repositories appear in the app and can generate notifications.
 - Keeps the last successful results visible when GitHub is temporarily unavailable.
 - Opens at login and refreshes automatically on your preferred schedule.

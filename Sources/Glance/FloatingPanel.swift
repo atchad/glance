@@ -47,9 +47,10 @@ final class FloatingPanelController: NSObject, ObservableObject, NSWindowDelegat
   }
 
   private func makePanel() -> NSPanel {
-    let frame = restoredFrame() ?? NSRect(x: 80, y: 160, width: 410, height: 620)
+    let savedFrame = restoredFrame()
+    let initialContentRect = NSRect(x: 80, y: 160, width: 410, height: 620)
     let panel = NSPanel(
-      contentRect: frame,
+      contentRect: initialContentRect,
       styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
       backing: .buffered,
       defer: false
@@ -66,11 +67,24 @@ final class FloatingPanelController: NSObject, ObservableObject, NSWindowDelegat
     panel.showsResizeIndicator = true
     panel.standardWindowButton(.zoomButton)?.isEnabled = true
     panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-    panel.delegate = self
     panel.contentViewController = NSHostingController(
       rootView: DashboardView(store: store, surface: .panel, openSettings: openSettingsAction)
     )
+    // Hosting attachment can resize the window to the view's minimum. Apply geometry
+    // afterwards, keeping persisted outer frames distinct from the default content size.
+    if let savedFrame {
+      panel.setFrame(savedFrame, display: false)
+    } else {
+      panel.setContentSize(initialContentRect.size)
+      panel.setFrameOrigin(initialContentRect.origin)
+    }
+    if let screen = panel.screen ?? NSScreen.main {
+      panel.setFrame(Self.constrainedFrame(panel.frame, to: screen.visibleFrame), display: false)
+    }
     self.panel = panel
+    // Only persist finished geometry, never intermediate hosting/construction sizes.
+    panel.delegate = self
+    saveFrame()
     installTitleBarMonitor(for: panel)
     return panel
   }
@@ -112,5 +126,18 @@ final class FloatingPanelController: NSObject, ObservableObject, NSWindowDelegat
     let frame = NSRectFromString(value)
     guard frame.width >= 310, frame.height >= 320 else { return nil }
     return NSScreen.screens.contains(where: { $0.visibleFrame.intersects(frame) }) ? frame : nil
+  }
+
+  nonisolated static func constrainedFrame(_ frame: NSRect, to visibleFrame: NSRect) -> NSRect {
+    let size = NSSize(
+      width: min(frame.width, visibleFrame.width),
+      height: min(frame.height, visibleFrame.height)
+    )
+    return NSRect(
+      x: max(visibleFrame.minX, min(frame.minX, visibleFrame.maxX - size.width)),
+      y: max(visibleFrame.minY, min(frame.minY, visibleFrame.maxY - size.height)),
+      width: size.width,
+      height: size.height
+    )
   }
 }

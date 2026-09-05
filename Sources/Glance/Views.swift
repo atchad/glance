@@ -212,7 +212,13 @@ struct DashboardView: View {
               select: { selectedPullRequestID = rowID(section, pullRequest) }
             )
             .id(rowID(section, pullRequest))
-            if pullRequest.id != items.last?.id { Divider().padding(.leading, 30) }
+            if pullRequest.id != items.last?.id {
+              Rectangle()
+                .fill(Color(nsColor: .separatorColor))
+                .frame(height: 1)
+                .padding(.horizontal, 13)
+                .accessibilityHidden(true)
+            }
           }
         }
       }

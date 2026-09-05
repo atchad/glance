@@ -230,7 +230,8 @@ final class AppStore: ObservableObject {
         let previousUnique = Self.uniquePullRequests(in: snapshots)
         let nextUnique = Self.uniquePullRequests(in: nextSnapshots)
         let transitions = hasNotificationBaseline
-          ? PRTransition.detect(previous: previousUnique, current: nextUnique) : []
+          ? PRTransition.detect(previous: previousUnique, current: nextUnique,
+            enabledEvents: preferences.notificationEvents) : []
         snapshots = nextSnapshots
         hasNotificationBaseline = true
         let activeIDs = Set(nextSnapshots.values.flatMap { $0.map(\.id) })

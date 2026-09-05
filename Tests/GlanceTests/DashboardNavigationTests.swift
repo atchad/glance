@@ -67,6 +67,7 @@ final class DashboardNavigationTests: XCTestCase {
       viewerReviewedHeadOID: nil, viewerReviewSubmittedAt: nil,
       hasCurrentApprovalFromOtherReviewer: false, stackPosition: nil, stackSize: nil,
       viewerDidAuthor: false, mergeState: nil, unresolvedConversationCount: 0, checks: nil,
-      autoMergeEnabled: false, mergeQueuePosition: nil, lifecycleState: .open)
+      autoMergeEnabled: false, mergeQueuePosition: nil, lifecycleState: .open,
+      viewerReviewRequested: false)
   }
 }

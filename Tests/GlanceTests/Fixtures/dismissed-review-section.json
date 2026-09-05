@@ -1,0 +1,631 @@
+{
+  "data": {
+    "viewer": {
+      "login": "viewer"
+    },
+    "search": {
+      "pageInfo": {
+        "hasNextPage": false,
+        "endCursor": null
+      },
+      "nodes": [
+        {
+          "id": "dismissed",
+          "number": 1,
+          "title": "dismissed",
+          "url": "https://github.com/example/repo/pull/1",
+          "headRefName": "feature",
+          "headRefOid": "head",
+          "createdAt": "2026-09-01T00:00:00Z",
+          "updatedAt": "2026-09-04T12:00:00Z",
+          "isDraft": false,
+          "state": "OPEN",
+          "merged": false,
+          "additions": 1,
+          "deletions": 0,
+          "reviewDecision": "REVIEW_REQUIRED",
+          "viewerDidAuthor": false,
+          "mergeable": "MERGEABLE",
+          "mergeStateStatus": "CLEAN",
+          "author": {
+            "login": "author",
+            "avatarUrl": null
+          },
+          "repository": {
+            "nameWithOwner": "example/repo"
+          },
+          "labels": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [],
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": null
+            }
+          },
+          "reviews": {
+            "nodes": [
+              {
+                "author": {
+                  "login": "viewer"
+                },
+                "state": "DISMISSED",
+                "submittedAt": "2026-09-01T12:00:00Z",
+                "commit": {
+                  "oid": "head"
+                }
+              }
+            ]
+          },
+          "reviewThreads": {
+            "totalCount": 0,
+            "nodes": []
+          },
+          "timelineItems": {
+            "nodes": []
+          },
+          "commits": {
+            "nodes": []
+          }
+        },
+        {
+          "id": "approval-then-dismissed",
+          "number": 1,
+          "title": "approval-then-dismissed",
+          "url": "https://github.com/example/repo/pull/1",
+          "headRefName": "feature",
+          "headRefOid": "head",
+          "createdAt": "2026-09-01T00:00:00Z",
+          "updatedAt": "2026-09-04T12:00:00Z",
+          "isDraft": false,
+          "state": "OPEN",
+          "merged": false,
+          "additions": 1,
+          "deletions": 0,
+          "reviewDecision": "REVIEW_REQUIRED",
+          "viewerDidAuthor": false,
+          "mergeable": "MERGEABLE",
+          "mergeStateStatus": "CLEAN",
+          "author": {
+            "login": "author",
+            "avatarUrl": null
+          },
+          "repository": {
+            "nameWithOwner": "example/repo"
+          },
+          "labels": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [],
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": null
+            }
+          },
+          "reviews": {
+            "nodes": [
+              {
+                "author": {
+                  "login": "viewer"
+                },
+                "state": "APPROVED",
+                "submittedAt": "2026-09-01T12:00:00Z",
+                "commit": {
+                  "oid": "head"
+                }
+              },
+              {
+                "author": {
+                  "login": "viewer"
+                },
+                "state": "DISMISSED",
+                "submittedAt": "2026-09-02T12:00:00Z",
+                "commit": {
+                  "oid": "head"
+                }
+              }
+            ]
+          },
+          "reviewThreads": {
+            "totalCount": 0,
+            "nodes": []
+          },
+          "timelineItems": {
+            "nodes": []
+          },
+          "commits": {
+            "nodes": []
+          }
+        },
+        {
+          "id": "changes-then-dismissed",
+          "number": 1,
+          "title": "changes-then-dismissed",
+          "url": "https://github.com/example/repo/pull/1",
+          "headRefName": "feature",
+          "headRefOid": "head",
+          "createdAt": "2026-09-01T00:00:00Z",
+          "updatedAt": "2026-09-04T12:00:00Z",
+          "isDraft": false,
+          "state": "OPEN",
+          "merged": false,
+          "additions": 1,
+          "deletions": 0,
+          "reviewDecision": "REVIEW_REQUIRED",
+          "viewerDidAuthor": false,
+          "mergeable": "MERGEABLE",
+          "mergeStateStatus": "CLEAN",
+          "author": {
+            "login": "author",
+            "avatarUrl": null
+          },
+          "repository": {
+            "nameWithOwner": "example/repo"
+          },
+          "labels": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [],
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": null
+            }
+          },
+          "reviews": {
+            "nodes": [
+              {
+                "author": {
+                  "login": "viewer"
+                },
+                "state": "CHANGES_REQUESTED",
+                "submittedAt": "2026-09-01T12:00:00Z",
+                "commit": {
+                  "oid": "head"
+                }
+              },
+              {
+                "author": {
+                  "login": "viewer"
+                },
+                "state": "DISMISSED",
+                "submittedAt": "2026-09-02T12:00:00Z",
+                "commit": {
+                  "oid": "head"
+                }
+              }
+            ]
+          },
+          "reviewThreads": {
+            "totalCount": 0,
+            "nodes": []
+          },
+          "timelineItems": {
+            "nodes": []
+          },
+          "commits": {
+            "nodes": []
+          }
+        },
+        {
+          "id": "dismissed-then-approved",
+          "number": 1,
+          "title": "dismissed-then-approved",
+          "url": "https://github.com/example/repo/pull/1",
+          "headRefName": "feature",
+          "headRefOid": "head",
+          "createdAt": "2026-09-01T00:00:00Z",
+          "updatedAt": "2026-09-04T12:00:00Z",
+          "isDraft": false,
+          "state": "OPEN",
+          "merged": false,
+          "additions": 1,
+          "deletions": 0,
+          "reviewDecision": "REVIEW_REQUIRED",
+          "viewerDidAuthor": false,
+          "mergeable": "MERGEABLE",
+          "mergeStateStatus": "CLEAN",
+          "author": {
+            "login": "author",
+            "avatarUrl": null
+          },
+          "repository": {
+            "nameWithOwner": "example/repo"
+          },
+          "labels": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [],
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": null
+            }
+          },
+          "reviews": {
+            "nodes": [
+              {
+                "author": {
+                  "login": "viewer"
+                },
+                "state": "DISMISSED",
+                "submittedAt": "2026-09-01T12:00:00Z",
+                "commit": {
+                  "oid": "head"
+                }
+              },
+              {
+                "author": {
+                  "login": "viewer"
+                },
+                "state": "APPROVED",
+                "submittedAt": "2026-09-02T12:00:00Z",
+                "commit": {
+                  "oid": "head"
+                }
+              }
+            ]
+          },
+          "reviewThreads": {
+            "totalCount": 0,
+            "nodes": []
+          },
+          "timelineItems": {
+            "nodes": []
+          },
+          "commits": {
+            "nodes": []
+          }
+        },
+        {
+          "id": "dismissed-then-changes",
+          "number": 1,
+          "title": "dismissed-then-changes",
+          "url": "https://github.com/example/repo/pull/1",
+          "headRefName": "feature",
+          "headRefOid": "head",
+          "createdAt": "2026-09-01T00:00:00Z",
+          "updatedAt": "2026-09-04T12:00:00Z",
+          "isDraft": false,
+          "state": "OPEN",
+          "merged": false,
+          "additions": 1,
+          "deletions": 0,
+          "reviewDecision": "REVIEW_REQUIRED",
+          "viewerDidAuthor": false,
+          "mergeable": "MERGEABLE",
+          "mergeStateStatus": "CLEAN",
+          "author": {
+            "login": "author",
+            "avatarUrl": null
+          },
+          "repository": {
+            "nameWithOwner": "example/repo"
+          },
+          "labels": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [],
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": null
+            }
+          },
+          "reviews": {
+            "nodes": [
+              {
+                "author": {
+                  "login": "viewer"
+                },
+                "state": "DISMISSED",
+                "submittedAt": "2026-09-01T12:00:00Z",
+                "commit": {
+                  "oid": "head"
+                }
+              },
+              {
+                "author": {
+                  "login": "viewer"
+                },
+                "state": "CHANGES_REQUESTED",
+                "submittedAt": "2026-09-02T12:00:00Z",
+                "commit": {
+                  "oid": "head"
+                }
+              }
+            ]
+          },
+          "reviewThreads": {
+            "totalCount": 0,
+            "nodes": []
+          },
+          "timelineItems": {
+            "nodes": []
+          },
+          "commits": {
+            "nodes": []
+          }
+        },
+        {
+          "id": "rerequested",
+          "number": 1,
+          "title": "rerequested",
+          "url": "https://github.com/example/repo/pull/1",
+          "headRefName": "feature",
+          "headRefOid": "head",
+          "createdAt": "2026-09-01T00:00:00Z",
+          "updatedAt": "2026-09-04T12:00:00Z",
+          "isDraft": false,
+          "state": "OPEN",
+          "merged": false,
+          "additions": 1,
+          "deletions": 0,
+          "reviewDecision": "REVIEW_REQUIRED",
+          "viewerDidAuthor": false,
+          "mergeable": "MERGEABLE",
+          "mergeStateStatus": "CLEAN",
+          "author": {
+            "login": "author",
+            "avatarUrl": null
+          },
+          "repository": {
+            "nameWithOwner": "example/repo"
+          },
+          "labels": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "login": "viewer"
+                }
+              }
+            ],
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": null
+            }
+          },
+          "reviews": {
+            "nodes": [
+              {
+                "author": {
+                  "login": "viewer"
+                },
+                "state": "DISMISSED",
+                "submittedAt": "2026-09-01T12:00:00Z",
+                "commit": {
+                  "oid": "head"
+                }
+              }
+            ]
+          },
+          "reviewThreads": {
+            "totalCount": 0,
+            "nodes": []
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "login": "viewer"
+                },
+                "createdAt": "2026-09-03T12:00:00Z"
+              }
+            ]
+          },
+          "commits": {
+            "nodes": []
+          }
+        },
+        {
+          "id": "new-commits",
+          "number": 1,
+          "title": "new-commits",
+          "url": "https://github.com/example/repo/pull/1",
+          "headRefName": "feature",
+          "headRefOid": "new-head",
+          "createdAt": "2026-09-01T00:00:00Z",
+          "updatedAt": "2026-09-04T12:00:00Z",
+          "isDraft": false,
+          "state": "OPEN",
+          "merged": false,
+          "additions": 1,
+          "deletions": 0,
+          "reviewDecision": "REVIEW_REQUIRED",
+          "viewerDidAuthor": false,
+          "mergeable": "MERGEABLE",
+          "mergeStateStatus": "CLEAN",
+          "author": {
+            "login": "author",
+            "avatarUrl": null
+          },
+          "repository": {
+            "nameWithOwner": "example/repo"
+          },
+          "labels": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [],
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": null
+            }
+          },
+          "reviews": {
+            "nodes": [
+              {
+                "author": {
+                  "login": "viewer"
+                },
+                "state": "DISMISSED",
+                "submittedAt": "2026-09-01T12:00:00Z",
+                "commit": {
+                  "oid": "head"
+                }
+              }
+            ]
+          },
+          "reviewThreads": {
+            "totalCount": 0,
+            "nodes": []
+          },
+          "timelineItems": {
+            "nodes": []
+          },
+          "commits": {
+            "nodes": []
+          }
+        },
+        {
+          "id": "other-request",
+          "number": 1,
+          "title": "other-request",
+          "url": "https://github.com/example/repo/pull/1",
+          "headRefName": "feature",
+          "headRefOid": "head",
+          "createdAt": "2026-09-01T00:00:00Z",
+          "updatedAt": "2026-09-04T12:00:00Z",
+          "isDraft": false,
+          "state": "OPEN",
+          "merged": false,
+          "additions": 1,
+          "deletions": 0,
+          "reviewDecision": "REVIEW_REQUIRED",
+          "viewerDidAuthor": false,
+          "mergeable": "MERGEABLE",
+          "mergeStateStatus": "CLEAN",
+          "author": {
+            "login": "author",
+            "avatarUrl": null
+          },
+          "repository": {
+            "nameWithOwner": "example/repo"
+          },
+          "labels": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "login": "other"
+                }
+              }
+            ],
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": null
+            }
+          },
+          "reviews": {
+            "nodes": [
+              {
+                "author": {
+                  "login": "viewer"
+                },
+                "state": "DISMISSED",
+                "submittedAt": "2026-09-01T12:00:00Z",
+                "commit": {
+                  "oid": "head"
+                }
+              }
+            ]
+          },
+          "reviewThreads": {
+            "totalCount": 0,
+            "nodes": []
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "login": "other"
+                },
+                "createdAt": "2026-09-03T12:00:00Z"
+              }
+            ]
+          },
+          "commits": {
+            "nodes": []
+          }
+        },
+        {
+          "id": "other-approval",
+          "number": 1,
+          "title": "other-approval",
+          "url": "https://github.com/example/repo/pull/1",
+          "headRefName": "feature",
+          "headRefOid": "head",
+          "createdAt": "2026-09-01T00:00:00Z",
+          "updatedAt": "2026-09-04T12:00:00Z",
+          "isDraft": false,
+          "state": "OPEN",
+          "merged": false,
+          "additions": 1,
+          "deletions": 0,
+          "reviewDecision": "REVIEW_REQUIRED",
+          "viewerDidAuthor": false,
+          "mergeable": "MERGEABLE",
+          "mergeStateStatus": "CLEAN",
+          "author": {
+            "login": "author",
+            "avatarUrl": null
+          },
+          "repository": {
+            "nameWithOwner": "example/repo"
+          },
+          "labels": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [],
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": null
+            }
+          },
+          "reviews": {
+            "nodes": [
+              {
+                "author": {
+                  "login": "viewer"
+                },
+                "state": "DISMISSED",
+                "submittedAt": "2026-09-01T12:00:00Z",
+                "commit": {
+                  "oid": "head"
+                }
+              },
+              {
+                "author": {
+                  "login": "other"
+                },
+                "state": "APPROVED",
+                "submittedAt": "2026-09-02T12:00:00Z",
+                "commit": {
+                  "oid": "head"
+                }
+              }
+            ]
+          },
+          "reviewThreads": {
+            "totalCount": 0,
+            "nodes": []
+          },
+          "timelineItems": {
+            "nodes": []
+          },
+          "commits": {
+            "nodes": []
+          }
+        }
+      ]
+    }
+  }
+}

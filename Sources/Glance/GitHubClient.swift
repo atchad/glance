@@ -548,7 +548,7 @@ private struct RawPullRequest: Decodable {
       requestedReviewers: reviewRequests.nodes.compactMap {
         $0.requestedReviewer?.login ?? $0.requestedReviewer?.name
       },
-      viewerReviewState: viewerReview?.state == "DISMISSED" ? "APPROVED" : viewerReview?.state,
+      viewerReviewState: viewerReview?.state,
       viewerReviewedHeadOID: viewerReview?.commit?.oid,
       viewerReviewSubmittedAt: viewerReview?.submittedAt,
       hasCurrentApprovalFromOtherReviewer: hasCurrentApprovalFromOtherReviewer,

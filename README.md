@@ -58,6 +58,8 @@ Glance releases are universal for Apple silicon and Intel Macs, signed with a De
 
 ## Make it yours
 
+Glance labels a review request as yours when GitHub names your account directly or confirms your membership in the requested team (including child teams). Unavailable membership or incomplete request data is treated as unknown. Review-request dates come only from matching personal or team events; an unavailable date falls back to the PR creation date in the row.
+
 Glance starts with sections for pull requests requesting your review and pull requests you opened. In Settings, you can:
 
 - Add, rename, reorder, or remove sections backed by validated GitHub pull-request searches.

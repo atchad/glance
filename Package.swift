@@ -25,6 +25,7 @@ let package = Package(
       name: "GlanceTests",
       dependencies: ["Glance"],
       path: "Tests/GlanceTests",
+      exclude: ["Fixtures"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
   ]

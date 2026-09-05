@@ -87,21 +87,73 @@ struct GitHubClient {
     viewer: String, snapshots: [SectionSnapshot]
   ) {
     let credential = try await session.credential()
-    return try await withThrowingTaskGroup(of: (Int, String, SectionSnapshot).self) { group in
+    let collected = try await withThrowingTaskGroup(
+      of: (Int, String, [RawPullRequest]).self
+    ) { group in
       for (index, section) in sections.enumerated() {
         group.addTask {
           let result = try await fetch(section: section, credential: credential)
-          return (
-            index, result.viewer, SectionSnapshot(id: section.id, pullRequests: result.pullRequests)
-          )
+          return (index, result.viewer, result.pullRequests)
         }
       }
-
-      var collected: [(Int, String, SectionSnapshot)] = []
-      for try await result in group { collected.append(result) }
-      collected.sort { $0.0 < $1.0 }
-      return (collected.first?.1 ?? "", collected.map(\.2))
+      var results: [(Int, String, [RawPullRequest])] = []
+      for try await result in group { results.append(result) }
+      return results.sorted { $0.0 < $1.0 }
     }
+    let viewer = collected.first?.1 ?? ""
+    let teamIDs = Set(collected.flatMap { $0.2 }.flatMap { $0.requestedTeamIDs })
+    var memberships: [String: Bool] = [:]
+    for teamID in teamIDs.sorted() {
+      do {
+        memberships[teamID] = try await isMember(
+          of: teamID, viewer: viewer, credential: credential)
+      } catch {
+        try Task.checkCancellation()
+        // An inaccessible team is unknown, not evidence that the viewer is a member.
+      }
+    }
+    return (viewer, collected.map { index, login, requests in
+      SectionSnapshot(id: sections[index].id, pullRequests: requests.map {
+        $0.model(viewer: login, teamMemberships: memberships)
+      })
+    })
+  }
+
+  private func isMember(
+    of teamID: String, viewer: String, credential: GitHubCredential
+  ) async throws -> Bool {
+    let query = """
+      query GlanceTeamMembership($teamID: ID!, $viewer: String!, $cursor: String) {
+        node(id: $teamID) {
+          ... on Team {
+            members(first: 100, after: $cursor, query: $viewer, membership: ALL) {
+              nodes { login }
+              pageInfo { hasNextPage endCursor }
+            }
+          }
+        }
+      }
+      """
+    var cursor: String?
+    repeat {
+      let payload = TeamMembershipRequest(
+        query: query, variables: .init(teamID: teamID, viewer: viewer, cursor: cursor))
+      let request = requestFactory.graphQLRequest(
+        body: try JSONEncoder().encode(payload), credential: credential)
+      let (data, response) = try await urlSession.data(for: request)
+      guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode)
+      else { throw GitHubError.invalidResponse }
+      let decoded = try JSONDecoder().decode(TeamMembershipResponse.self, from: data)
+      guard decoded.errors?.isEmpty != false, let members = decoded.data?.node?.members
+      else { throw GitHubError.invalidResponse }
+      if members.nodes.contains(where: { $0.login.caseInsensitiveCompare(viewer) == .orderedSame }) {
+        return true
+      }
+      guard members.pageInfo.hasNextPage else { return false }
+      guard let next = members.pageInfo.endCursor, next != cursor
+      else { throw GitHubError.invalidResponse }
+      cursor = next
+    } while true
   }
 
   func validateSearchQuery(_ query: String) async throws {
@@ -140,10 +192,10 @@ struct GitHubClient {
   }
 
   private func fetch(section: PRSection, credential: GitHubCredential) async throws -> (
-    viewer: String, pullRequests: [PullRequest]
+    viewer: String, pullRequests: [RawPullRequest]
   ) {
     var viewer = ""
-    var pullRequests: [PullRequest] = []
+    var pullRequests: [RawPullRequest] = []
     var cursor: String?
 
     repeat {
@@ -160,7 +212,7 @@ struct GitHubClient {
     section: PRSection,
     credential: GitHubCredential,
     cursor: String?
-  ) async throws -> (viewer: String, pullRequests: [PullRequest], nextCursor: String?) {
+  ) async throws -> (viewer: String, pullRequests: [RawPullRequest], nextCursor: String?) {
     let query = """
       query GlanceSection($query: String!, $cursor: String) {
         viewer { login }
@@ -177,11 +229,12 @@ struct GitHubClient {
               author { login avatarUrl }
               repository { nameWithOwner }
               labels(first: 10) { nodes { name } }
-              reviewRequests(first: 10) {
+              reviewRequests(first: 100) {
+                pageInfo { hasNextPage endCursor }
                 nodes {
                   requestedReviewer {
                     ... on User { login }
-                    ... on Team { name }
+                    ... on Team { id name }
                   }
                 }
               }
@@ -203,7 +256,7 @@ struct GitHubClient {
                     createdAt
                     requestedReviewer {
                       ... on User { login }
-                      ... on Team { name }
+                      ... on Team { id name }
                     }
                   }
                 }
@@ -246,11 +299,36 @@ struct GitHubClient {
     if let message = decoded.errors?.first?.message { throw GitHubError.api(message) }
     guard let graph = decoded.data else { throw GitHubError.invalidResponse }
     let pullRequests = graph.search.nodes.compactMap {
-      $0?.rawPullRequest?.model(viewer: graph.viewer.login)
+      $0?.rawPullRequest
     }
     let nextCursor = graph.search.pageInfo.hasNextPage ? graph.search.pageInfo.endCursor : nil
     return (graph.viewer.login, pullRequests, nextCursor)
   }
+}
+
+private struct TeamMembershipRequest: Encodable {
+  struct Variables: Encodable {
+    let teamID: String
+    let viewer: String
+    let cursor: String?
+  }
+  let query: String
+  let variables: Variables
+}
+
+private struct TeamMembershipResponse: Decodable {
+  struct GraphData: Decodable {
+    struct Team: Decodable {
+      struct Members: Decodable {
+        let nodes: [Viewer]
+        let pageInfo: SearchResult.PageInfo
+      }
+      let members: Members?
+    }
+    let node: Team?
+  }
+  let data: GraphData?
+  let errors: [GraphError]?
 }
 
 private struct GraphQLRequest: Encodable {
@@ -315,11 +393,21 @@ private struct RawPullRequest: Decodable {
   struct Repository: Decodable { let nameWithOwner: String }
   struct LabelConnection: Decodable { let nodes: [Label] }
   struct Label: Decodable { let name: String }
-  struct ReviewRequestConnection: Decodable { let nodes: [ReviewNode] }
+  struct ReviewRequestConnection: Decodable {
+    let nodes: [ReviewNode]
+    let pageInfo: SearchResult.PageInfo
+  }
   struct ReviewNode: Decodable { let requestedReviewer: Reviewer? }
   struct Reviewer: Decodable {
     let login: String?
     let name: String?
+    let id: String?
+
+    func targets(viewer: String, memberships: [String: Bool]) -> Bool? {
+      if let login { return login.caseInsensitiveCompare(viewer) == .orderedSame }
+      if let id { return memberships[id] }
+      return nil
+    }
   }
   struct ReviewEventConnection: Decodable { let nodes: [ReviewEvent] }
   struct ReviewEvent: Decodable {
@@ -391,7 +479,12 @@ private struct RawPullRequest: Decodable {
   let timelineItems: ReviewEventConnection
   let commits: CommitConnection
 
-  func model(viewer: String) -> PullRequest {
+  var requestedTeamIDs: [String] {
+    (reviewRequests.nodes.map(\.requestedReviewer) + timelineItems.nodes.map(\.requestedReviewer))
+      .compactMap { $0?.login == nil ? $0?.id : nil }
+  }
+
+  func model(viewer: String, teamMemberships: [String: Bool]) -> PullRequest {
     let rollup = commits.nodes.last?.commit.statusCheckRollup
     let checkRollupState = rollup?.state
     let checks: PullRequest.CheckState =
@@ -426,9 +519,14 @@ private struct RawPullRequest: Decodable {
     default: .unknown
     }
     let lifecycleState = PullRequest.lifecycleState(state: self.state, merged: merged)
-    let matchingRequest =
-      timelineItems.nodes.last(where: { $0.requestedReviewer?.login == viewer })
-      ?? timelineItems.nodes.last
+    let targets = reviewRequests.nodes.map {
+      $0.requestedReviewer?.targets(viewer: viewer, memberships: teamMemberships)
+    }
+    let viewerReviewRequested: Bool? = targets.contains(true) ? true
+      : targets.contains(nil) || reviewRequests.pageInfo.hasNextPage ? nil : false
+    let matchingRequest = timelineItems.nodes.filter {
+      $0.requestedReviewer?.targets(viewer: viewer, memberships: teamMemberships) == true
+    }.max { $0.createdAt < $1.createdAt }
     let viewerReview = reviews.nodes.last {
       $0.author?.login == viewer
         && ($0.state == "APPROVED" || $0.state == "CHANGES_REQUESTED" || $0.state == "DISMISSED")
@@ -461,7 +559,7 @@ private struct RawPullRequest: Decodable {
       checks: detailedChecks,
       autoMergeEnabled: autoMergeRequest != nil,
       mergeQueuePosition: mergeQueueEntry?.position,
-      lifecycleState: lifecycleState
+      lifecycleState: lifecycleState, viewerReviewRequested: viewerReviewRequested
     )
   }
 }

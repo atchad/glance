@@ -451,7 +451,8 @@ final class ModelsTests: XCTestCase {
       stackPosition: nil, stackSize: nil, viewerDidAuthor: viewerDidAuthor,
       mergeState: mergeState, unresolvedConversationCount: unresolvedConversationCount,
       checks: detailedChecks, autoMergeEnabled: autoMergeEnabled,
-      mergeQueuePosition: mergeQueuePosition, lifecycleState: lifecycleState
+      mergeQueuePosition: mergeQueuePosition, lifecycleState: lifecycleState,
+      viewerReviewRequested: reviewers.contains("atchad") || reviewRequestedAt != nil
     )
   }
 }

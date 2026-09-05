@@ -28,7 +28,7 @@ struct DashboardView: View {
       } else {
         ScrollViewReader { proxy in
           ScrollView {
-            LazyVStack(spacing: 0) {
+            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
               Color.clear.frame(height: 0).id("dashboard-top")
               if let error = store.errorMessage { errorBanner(error) }
               ForEach(store.preferences.sections) { section in
@@ -186,22 +186,7 @@ struct DashboardView: View {
   @ViewBuilder
   private func sectionView(_ section: PRSection) -> some View {
     let items = navigation.items(in: section.id)
-    VStack(spacing: 0) {
-      Button {
-        store.toggleCollapse(section)
-      } label: {
-        HStack(spacing: 7) {
-          Image(systemName: section.isCollapsed ? "chevron.right" : "chevron.down")
-            .font(.caption2.weight(.bold)).foregroundStyle(.secondary)
-          Text(section.name).font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
-          Spacer()
-          Text("\(items.count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 13).padding(.vertical, 8)
-        .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      .help(section.isCollapsed ? "Show \(section.name)" : "Hide \(section.name)")
+    Section {
       if !section.isCollapsed {
         if items.isEmpty {
           Text(
@@ -231,6 +216,23 @@ struct DashboardView: View {
           }
         }
       }
+    } header: {
+      Button {
+        store.toggleCollapse(section)
+      } label: {
+        HStack(spacing: 7) {
+          Image(systemName: section.isCollapsed ? "chevron.right" : "chevron.down")
+            .font(.caption2.weight(.bold)).foregroundStyle(.secondary)
+          Text(section.name).font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+          Spacer()
+          Text("\(items.count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 13).padding(.vertical, 8)
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .help(section.isCollapsed ? "Show \(section.name)" : "Hide \(section.name)")
+      .background(.regularMaterial)
     }
   }
 
@@ -245,14 +247,7 @@ struct DashboardView: View {
   }
 
   private var snoozedSection: some View {
-    VStack(spacing: 0) {
-      HStack {
-        Image(systemName: "clock")
-        Text("Snoozed").font(.subheadline.weight(.medium))
-        Spacer()
-        Text("\(store.snoozedPullRequests.count)").font(.caption.monospacedDigit())
-      }
-      .foregroundStyle(.secondary).padding(.horizontal, 13).padding(.vertical, 8)
+    Section {
       ForEach(filtered(store.snoozedPullRequests)) { pullRequest in
         HStack(spacing: 10) {
           VStack(alignment: .leading, spacing: 2) {
@@ -265,6 +260,15 @@ struct DashboardView: View {
         }
         .padding(.horizontal, 13).padding(.vertical, 8)
       }
+    } header: {
+      HStack {
+        Image(systemName: "clock")
+        Text("Snoozed").font(.subheadline.weight(.medium))
+        Spacer()
+        Text("\(store.snoozedPullRequests.count)").font(.caption.monospacedDigit())
+      }
+      .foregroundStyle(.secondary).padding(.horizontal, 13).padding(.vertical, 8)
+      .background(.regularMaterial)
     }
   }
 

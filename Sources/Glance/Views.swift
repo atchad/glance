@@ -10,7 +10,7 @@ struct DashboardView: View {
   var openSettings: (() -> Void)?
   var didOpenPullRequest: (() -> Void)?
   @State private var searchText = ""
-  @State private var selectedPullRequestID: String?
+  @State private var selectedPullRequestID: DashboardNavigation.RowID?
   @FocusState private var isSearchFocused: Bool
   @FocusState private var isDashboardFocused: Bool
 
@@ -56,6 +56,9 @@ struct DashboardView: View {
     .focusable()
     .focused($isDashboardFocused)
     .onAppear { isDashboardFocused = true }
+    .onChange(of: navigation.rows.map(\.id)) { _, _ in
+      selectedPullRequestID = navigation.reconciled(selectedPullRequestID)
+    }
     .onKeyPress(.downArrow) {
       guard !isSearchFocused else { return .ignored }
       moveSelection(by: 1)
@@ -182,7 +185,7 @@ struct DashboardView: View {
 
   @ViewBuilder
   private func sectionView(_ section: PRSection) -> some View {
-    let items = filtered(store.pullRequests(in: section))
+    let items = navigation.items(in: section.id)
     VStack(spacing: 0) {
       Button {
         store.toggleCollapse(section)
@@ -220,10 +223,10 @@ struct DashboardView: View {
               togglePin: { store.togglePin(pullRequest) },
               snooze: { store.snooze(pullRequest, condition: $0) },
               isPinned: store.preferences.pinnedPullRequests.contains(pullRequest.id),
-              isSelected: selectedPullRequestID == pullRequest.id,
-              select: { selectedPullRequestID = pullRequest.id }
+              isSelected: selectedPullRequestID == rowID(section, pullRequest),
+              select: { selectedPullRequestID = rowID(section, pullRequest) }
             )
-            .id(pullRequest.id)
+            .id(rowID(section, pullRequest))
             if pullRequest.id != items.last?.id { Divider().padding(.leading, 30) }
           }
         }
@@ -231,10 +234,14 @@ struct DashboardView: View {
     }
   }
 
-  private var visiblePullRequests: [PullRequest] {
-    var seen: Set<String> = []
-    return store.preferences.sections.flatMap { filtered(store.pullRequests(in: $0)) }
-      .filter { seen.insert($0.id).inserted }
+  private var navigation: DashboardNavigation {
+    DashboardNavigation(
+      sections: store.preferences.sections.map { ($0, store.pullRequests(in: $0)) },
+      query: searchText)
+  }
+
+  private func rowID(_ section: PRSection, _ pullRequest: PullRequest) -> DashboardNavigation.RowID {
+    .init(sectionID: section.id, pullRequestID: pullRequest.id)
   }
 
   private var snoozedSection: some View {
@@ -262,26 +269,15 @@ struct DashboardView: View {
   }
 
   private func filtered(_ pullRequests: [PullRequest]) -> [PullRequest] {
-    let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !query.isEmpty else { return pullRequests }
-    return pullRequests.filter {
-      [$0.title, $0.repository, $0.author, $0.branch, "#\($0.number)", $0.attention.message]
-        .joined(separator: " ").localizedCaseInsensitiveContains(query)
-        || $0.labels.contains { $0.localizedCaseInsensitiveContains(query) }
-    }
+    DashboardNavigation.filtered(pullRequests, query: searchText)
   }
 
   private func moveSelection(by offset: Int) {
-    let items = visiblePullRequests
-    guard !items.isEmpty else { selectedPullRequestID = nil; return }
-    let current = selectedPullRequestID.flatMap { id in items.firstIndex { $0.id == id } }
-      ?? (offset > 0 ? -1 : 0)
-    selectedPullRequestID = items[(current + offset + items.count) % items.count].id
+    selectedPullRequestID = navigation.moved(from: selectedPullRequestID, by: offset)
   }
 
   private func performSelected(_ action: (PullRequest) -> Void) -> KeyPress.Result {
-    guard let id = selectedPullRequestID,
-      let pullRequest = visiblePullRequests.first(where: { $0.id == id })
+    guard let pullRequest = navigation.pullRequest(for: selectedPullRequestID)
     else { return .ignored }
     action(pullRequest)
     return .handled

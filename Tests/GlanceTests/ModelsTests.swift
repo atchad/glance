@@ -217,6 +217,25 @@ final class ModelsTests: XCTestCase {
     XCTAssertEqual(PRTransition.detect(previous: [passed], current: [ready]).map(\.event), [.becameReady])
   }
 
+  func testReadinessRetainsConversationAndQueueBlockers() {
+    let ready = makePullRequest(checks: .success, reviewDecision: "APPROVED", viewerDidAuthor: true)
+    for blocked in [
+      makePullRequest(checks: .success, reviewDecision: "APPROVED", viewerDidAuthor: true,
+        unresolvedConversationCount: 1),
+      makePullRequest(checks: .success, reviewDecision: "APPROVED", viewerDidAuthor: true,
+        autoMergeEnabled: true),
+      makePullRequest(checks: .success, reviewDecision: "APPROVED", viewerDidAuthor: true,
+        mergeQueuePosition: 1),
+    ] {
+      XCTAssertEqual(PRTransition.detect(previous: [blocked], current: [ready]).first?.event, .becameReady)
+    }
+    let failing = makePullRequest(checks: .failure, reviewDecision: "APPROVED", viewerDidAuthor: true,
+      unresolvedConversationCount: 1)
+    let blocked = makePullRequest(checks: .success, reviewDecision: "APPROVED", viewerDidAuthor: true,
+      unresolvedConversationCount: 1)
+    XCTAssertEqual(PRTransition.detect(previous: [failing], current: [blocked]).map(\.event), [.checksRecovered])
+  }
+
   func testTransitionDetectorCoalescesToOneEventPerPullRequestRefresh() {
     let old = makePullRequest(id: "pr", checks: .pending, viewerDidAuthor: true)
     let failed = makePullRequest(id: "pr", checks: .failure, viewerDidAuthor: true, mergeState: .conflicting)

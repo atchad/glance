@@ -75,11 +75,8 @@ struct PRTransition: Identifiable, Equatable {
   }
 
   private static func isReady(_ pullRequest: PullRequest) -> Bool {
-    pullRequest.viewerDidAuthor == true && pullRequest.reviewDecision == "APPROVED"
-      && pullRequest.checksState == .success
-      && (pullRequest.mergeState == .clean || pullRequest.mergeState == nil)
-      && !pullRequest.isDraft && pullRequest.lifecycleState != .closed
-      && pullRequest.lifecycleState != .merged
+    // Readiness is the product's composite state, including conversation/queue blockers.
+    pullRequest.attention.reason == .readyToMerge
   }
 
   private static func make(

@@ -64,6 +64,58 @@ final class PersonalReviewTargetingTests: XCTestCase {
     XCTAssertTrue(legacy.isHiddenAfterApproval(using: Preferences()))
   }
 
+  func testDecodedDismissedReviewsPreserveHistoryWithoutCountingAsApproval() async throws {
+    let fixtureURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+      .appending(path: "Fixtures/dismissed-review-section.json")
+    let recorder = RequestRecorder(fixture: try Data(contentsOf: fixtureURL))
+    FixtureURLProtocol.handler = { try recorder.response(for: $0) }
+    defer { FixtureURLProtocol.handler = nil }
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [FixtureURLProtocol.self]
+    let session = URLSession(configuration: configuration)
+    defer { session.invalidateAndCancel() }
+    let client = GitHubClient(
+      session: GitHubSession(credentialProvider: FixtureCredentials()), urlSession: session)
+    let result = try await client.fetchAll(sections: [PRSection(name: "Custom", query: "is:pr")])
+    let prs = Dictionary(uniqueKeysWithValues: result.snapshots[0].pullRequests.map { ($0.id, $0) })
+    var preferences = Preferences.default
+    // Neither optional approval-return switch is needed to show a dismissed review.
+    preferences.showChangedPullRequestsAfterApproval = false
+    preferences.showRerequestedPullRequestsAfterApproval = false
+    for id in ["dismissed", "approval-then-dismissed", "changes-then-dismissed",
+               "rerequested", "new-commits", "other-request", "other-approval"] {
+      let pr = try XCTUnwrap(prs[id])
+      XCTAssertEqual(pr.viewerReviewState, "DISMISSED", id)
+      XCTAssertFalse(pr.isHiddenAfterApproval(using: Preferences.default), id)
+      XCTAssertFalse(pr.isHiddenAfterApproval(using: preferences), id)
+      XCTAssertEqual(pr.viewerReviewedHeadOID, "head", id)
+      XCTAssertNotNil(pr.viewerReviewSubmittedAt, id)
+      let cached = try JSONDecoder().decode(PullRequest.self, from: JSONEncoder().encode(pr))
+      XCTAssertEqual(cached, pr)
+      XCTAssertFalse(cached.isHiddenAfterApproval(using: preferences), id)
+    }
+    XCTAssertEqual(prs["dismissed"]?.attention.reason, .active)
+    XCTAssertEqual(prs["rerequested"]?.attention.reason, .reviewRerequested)
+    XCTAssertEqual(prs["new-commits"]?.attention.reason, .commitsSinceReview)
+    XCTAssertEqual(prs["other-request"]?.attention.reason, .active)
+    XCTAssertEqual(prs["other-request"]?.viewerReviewRequested, false)
+    let approved = try XCTUnwrap(prs["dismissed-then-approved"])
+    XCTAssertEqual(approved.viewerReviewState, "APPROVED")
+    XCTAssertTrue(approved.isHiddenAfterApproval(using: preferences))
+    let changes = try XCTUnwrap(prs["dismissed-then-changes"])
+    XCTAssertEqual(changes.viewerReviewState, "CHANGES_REQUESTED")
+    XCTAssertFalse(changes.isHiddenAfterApproval(using: preferences))
+    preferences.removePullRequestsAfterOtherApproval = true
+    XCTAssertTrue(try XCTUnwrap(prs["other-approval"]).isHiddenAfterApproval(using: preferences))
+
+    // Legacy APPROVED values have no provenance: retain them until a fresh response replaces them.
+    var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(approved)) as? [String: Any])
+    legacy.removeValue(forKey: "viewerReviewRequested")
+    let cached = try JSONDecoder().decode(PullRequest.self, from: JSONSerialization.data(withJSONObject: legacy))
+    XCTAssertEqual(cached.viewerReviewState, "APPROVED")
+    XCTAssertTrue(cached.isHiddenAfterApproval(using: Preferences.default))
+  }
+
   private func date(_ day: Int) -> Date? {
     ISO8601DateFormatter().date(from: "2026-09-0\(day)T12:00:00Z")
   }

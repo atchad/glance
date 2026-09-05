@@ -60,6 +60,8 @@ Glance releases are universal for Apple silicon and Intel Macs, signed with a De
 
 Glance labels a review request as yours when GitHub names your account directly or confirms your membership in the requested team (including child teams). Unavailable membership or incomplete request data is treated as unknown. Review-request dates come only from matching personal or team events; an unavailable date falls back to the PR creation date in the row.
 
+Dismissed reviews do not count as your approval, so they remain visible under the default approval filter when returned by a section’s query. Their review date and commit still support personal re-request and new-commit attention. The optional filter for approvals from other reviewers still applies independently. Older cached approvals remain unchanged until fresh GitHub data replaces them; previously hidden PRs require a successful refresh to return.
+
 Glance starts with sections for pull requests requesting your review and pull requests you opened. In Settings, you can:
 
 - Add, rename, reorder, or remove sections backed by validated GitHub pull-request searches.

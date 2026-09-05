@@ -53,6 +53,25 @@ final class GitHubAuthenticationTests: XCTestCase {
     XCTAssertEqual(request.value(forHTTPHeaderField: "User-Agent"), "Glance/0.1")
   }
 
+  func testCLIProviderExplicitlyRequestsGitHubDotComToken() async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let executable = directory.appendingPathComponent("gh")
+    try """
+      #!/bin/sh
+      [ "$#" -eq 4 ] && [ "$1" = auth ] && [ "$2" = token ] && \
+      [ "$3" = --hostname ] && [ "$4" = github.com ] || exit 1
+      printf 'github-dot-com-test-token\\n'
+      """.write(to: executable, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
+
+    let provider = GitHubCLICredentialProvider(executableCandidates: [executable.path])
+    let credential = try await provider.credential()
+
+    XCTAssertEqual(credential.accessToken, "github-dot-com-test-token")
+  }
+
   func testCLIProviderReportsUnavailableWhenNoCandidateExists() async {
     let provider = GitHubCLICredentialProvider(executableCandidates: ["/missing/gh"])
 

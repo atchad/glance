@@ -55,6 +55,12 @@ final class PersonalReviewTargetingTests: XCTestCase {
     XCTAssertNil(prs["direct-no-history"]?.personalReviewRequestedAt)
     XCTAssertEqual(recorder.teamCalls, ["TEAM_YES": 2, "TEAM_NO": 1, "TEAM_UNKNOWN": 1])
 
+    let transitions = PRTransition.detect(previous: [], current: result.snapshots.flatMap(\.pullRequests))
+    XCTAssertEqual(Set(transitions.map { $0.pullRequest.id }),
+      ["direct", "relevant-team", "mixed", "direct-no-history"])
+    XCTAssertEqual(transitions.count, 4)
+    XCTAssertEqual(transitions.first { $0.pullRequest.id == "relevant-team" }?.event, .reviewRerequested)
+
     // Old caches may contain a borrowed date: decoding must not turn it into personal evidence.
     var old = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(team)) as? [String: Any])
     old.removeValue(forKey: "viewerReviewRequested")

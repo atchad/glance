@@ -144,7 +144,8 @@ final class PinnedCacheTests: XCTestCase {
       hasCurrentApprovalFromOtherReviewer: hasCurrentApprovalFromOtherReviewer,
       stackPosition: nil, stackSize: nil, viewerDidAuthor: false,
       mergeState: nil, unresolvedConversationCount: 0, checks: nil,
-      autoMergeEnabled: false, mergeQueuePosition: nil, lifecycleState: .open
+      autoMergeEnabled: false, mergeQueuePosition: nil, lifecycleState: .open,
+      viewerReviewRequested: false
     )
   }
 }

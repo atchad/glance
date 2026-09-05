@@ -59,6 +59,13 @@ struct PullRequest: Codable, Identifiable, Hashable {
   let mergeQueuePosition: Int?
   let lifecycleState: LifecycleState?
 
+  // Missing in older caches, whose request dates could belong to another reviewer.
+  let viewerReviewRequested: Bool?
+
+  var personalReviewRequestedAt: Date? {
+    viewerReviewRequested == nil ? nil : reviewRequestedAt
+  }
+
   var revisionKey: String {
     headRefOID ?? updatedAt.ISO8601Format()
   }
@@ -105,17 +112,19 @@ struct PullRequest: Codable, Identifiable, Hashable {
     let changedSinceApproval =
       viewerReviewedHeadOID.map { $0 != headRefOID } ?? false
     let reviewWasRerequested =
-      reviewRequestedAt.map { requestDate in
+      personalReviewRequestedAt.map { requestDate in
         viewerReviewSubmittedAt.map { requestDate > $0 } ?? false
       } ?? false
     if changedSinceApproval && preferences.showChangedPullRequestsAfterApproval { return false }
-    if reviewWasRerequested && preferences.showRerequestedPullRequestsAfterApproval { return false }
+    if viewerReviewRequested == true && reviewWasRerequested
+      && preferences.showRerequestedPullRequestsAfterApproval
+    { return false }
     return true
   }
 
   var attention: PRAttentionSummary {
     let authored = viewerDidAuthor == true
-    let reviewWasRerequested = reviewRequestedAt.map { requestedAt in
+    let reviewWasRerequested = personalReviewRequestedAt.map { requestedAt in
       viewerReviewSubmittedAt.map { requestedAt > $0 } ?? false
     } ?? false
     let changedSinceReview = viewerReviewedHeadOID.map { $0 != headRefOID } ?? false
@@ -129,7 +138,7 @@ struct PullRequest: Codable, Identifiable, Hashable {
     if isDraft {
       return .init(level: .informational, reason: .draft, message: "Draft", priority: 900)
     }
-    if !authored, reviewWasRerequested {
+    if !authored, viewerReviewRequested == true, reviewWasRerequested {
       return .init(
         level: .actionRequired, reason: .reviewRerequested,
         message: "Review requested again", priority: 10)
@@ -139,7 +148,7 @@ struct PullRequest: Codable, Identifiable, Hashable {
         level: .actionRequired, reason: .commitsSinceReview,
         message: "New commits since your review", priority: 20)
     }
-    if !authored, !requestedReviewers.isEmpty {
+    if !authored, viewerReviewRequested == true {
       return .init(
         level: .actionRequired, reason: .reviewRequested,
         message: "Review requested", priority: 30)
@@ -194,6 +203,10 @@ struct PullRequest: Codable, Identifiable, Hashable {
       return .init(
         level: .ready, reason: .readyToMerge, message: "Ready to merge", priority: 140)
     }
+    if !authored, viewerReviewRequested == nil {
+      return .init(level: .waiting, reason: .reviewRequestUnknown,
+        message: "Review request status unavailable", priority: 150)
+    }
     return .init(level: .informational, reason: .active, message: "Active", priority: 800)
   }
 }
@@ -212,7 +225,7 @@ enum PRAttentionLevel: String, Codable {
 }
 
 enum PRAttentionReason: String, Codable {
-  case reviewRequested, reviewRerequested, commitsSinceReview, changesRequested
+  case reviewRequestUnknown, reviewRequested, reviewRerequested, commitsSinceReview, changesRequested
   case unresolvedConversations, checksFailing, checksPending, mergeConflict, branchBehind
   case waitingForReviews, readyToMerge, autoMerge, mergeQueue, draft, merged, closed, active
 }

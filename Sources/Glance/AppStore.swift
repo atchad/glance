@@ -288,8 +288,8 @@ final class AppStore: ObservableObject {
         }
         if left.updatedAt != right.updatedAt { return left.updatedAt > right.updatedAt }
       case .reviewRequested:
-        let leftDate = left.reviewRequestedAt ?? .distantPast
-        let rightDate = right.reviewRequestedAt ?? .distantPast
+        let leftDate = left.personalReviewRequestedAt ?? .distantPast
+        let rightDate = right.personalReviewRequestedAt ?? .distantPast
         if leftDate != rightDate { return leftDate > rightDate }
       case .updated:
         if left.updatedAt != right.updatedAt { return left.updatedAt > right.updatedAt }

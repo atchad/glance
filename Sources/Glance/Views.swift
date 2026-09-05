@@ -452,7 +452,7 @@ private struct PullRequestRow: View {
 
   private var displayedDate: Date {
     if preferences.timeDisplayMode == .reviewRequested {
-      return pullRequest.reviewRequestedAt ?? pullRequest.createdAt
+      return pullRequest.personalReviewRequestedAt ?? pullRequest.createdAt
     }
     return pullRequest.createdAt
   }
@@ -627,6 +627,7 @@ private struct AttentionReasonLabel: View {
     case .draft: "pencil.circle"
     case .merged: "arrow.triangle.merge"
     case .closed: "xmark.circle"
+    case .reviewRequestUnknown: "questionmark.circle"
     case .active: "circle.fill"
     }
   }

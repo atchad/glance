@@ -22,6 +22,9 @@ final class AppStore: ObservableObject {
     guard !storageIssues.isEmpty else { return nil }
     return storageIssues.sorted { $0.key < $1.key }.map(\.value).joined(separator: "\n")
   }
+  @Published private(set) var dismissalToUndo: (
+    id: String, title: String, revision: String, previousRevision: String?
+  )?
   @Published private(set) var connectionIssue: AppConnectionIssue?
   @Published private(set) var loginItemErrorMessage: String?
   @Published private(set) var notificationAuthorizationMessage: String?
@@ -348,7 +351,17 @@ final class AppStore: ObservableObject {
   func open(_ pullRequest: PullRequest) { NSWorkspace.shared.open(pullRequest.url) }
 
   func dismiss(_ pullRequest: PullRequest) {
+    dismissalToUndo = (
+      pullRequest.id, pullRequest.title, pullRequest.revisionKey,
+      preferences.dismissedRevisions[pullRequest.id])
     preferences.dismissedRevisions[pullRequest.id] = pullRequest.revisionKey
+  }
+
+  func undoDismissal() {
+    guard let dismissal = dismissalToUndo else { return }
+    dismissalToUndo = nil
+    guard preferences.dismissedRevisions[dismissal.id] == dismissal.revision else { return }
+    preferences.dismissedRevisions[dismissal.id] = dismissal.previousRevision
   }
 
   func togglePin(_ pullRequest: PullRequest) {

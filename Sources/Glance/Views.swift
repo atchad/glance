@@ -47,6 +47,18 @@ struct DashboardView: View {
           }
         }
       }
+      if let dismissal = store.dismissalToUndo {
+        HStack {
+          Text("Dismissed “\(dismissal.title)”")
+            .lineLimit(1)
+            .help(dismissal.title)
+          Spacer()
+          Button("Undo", action: store.undoDismissal)
+            .help("Restore the last dismissed pull request")
+        }
+        .font(.caption)
+        .padding(.horizontal, 13).padding(.vertical, 8)
+      }
       Divider()
       footer
     }

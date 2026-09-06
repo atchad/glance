@@ -22,6 +22,10 @@ final class AppStore: ObservableObject {
     guard !storageIssues.isEmpty else { return nil }
     return storageIssues.sorted { $0.key < $1.key }.map(\.value).joined(separator: "\n")
   }
+  @Published private(set) var dismissalUndoProgress = 1.0
+  private var dismissalUndoTask: Task<Void, Never>?
+  private var dismissalUndoPauses: Set<UUID> = []
+  private let dismissalUndoDuration: TimeInterval
   @Published private(set) var dismissalToUndo: (
     id: String, title: String, revision: String, previousRevision: String?
   )?
@@ -66,6 +70,7 @@ final class AppStore: ObservableObject {
 
   init(
     storageDirectory: URL? = nil,
+    dismissalUndoDuration: TimeInterval = 5,
     fetchSnapshots: @escaping ([PRSection]) async throws -> (
       viewer: String, snapshots: [SectionSnapshot]
     ) = { try await GitHubClient().fetchAll(sections: $0) }
@@ -74,6 +79,8 @@ final class AppStore: ObservableObject {
     preferencesURL = directory.appending(path: "preferences.json")
     cacheURL = directory.appending(path: "cache.json")
     self.fetchSnapshots = fetchSnapshots
+    self.dismissalUndoDuration =
+      dismissalUndoDuration.isFinite && dismissalUndoDuration > 0 ? dismissalUndoDuration : 5
     preferences = .default
     var loaded = load(Preferences.self, from: preferencesURL) ?? .default
     for index in loaded.sections.indices {
@@ -351,14 +358,40 @@ final class AppStore: ObservableObject {
   func open(_ pullRequest: PullRequest) { NSWorkspace.shared.open(pullRequest.url) }
 
   func dismiss(_ pullRequest: PullRequest) {
+    dismissalUndoTask?.cancel()
+    dismissalUndoProgress = 1
     dismissalToUndo = (
       pullRequest.id, pullRequest.title, pullRequest.revisionKey,
       preferences.dismissedRevisions[pullRequest.id])
     preferences.dismissedRevisions[pullRequest.id] = pullRequest.revisionKey
+    dismissalUndoTask = Task { [weak self] in
+      var previous = ProcessInfo.processInfo.systemUptime
+      while !Task.isCancelled {
+        do { try await Task.sleep(for: .milliseconds(50)) } catch { return }
+        guard !Task.isCancelled, let self else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        let elapsed = now - previous
+        previous = now
+        guard dismissalUndoPauses.isEmpty else { continue }
+        dismissalUndoProgress = max(0, dismissalUndoProgress - elapsed / dismissalUndoDuration)
+        if dismissalUndoProgress == 0 {
+          dismissalUndoTask = nil
+          dismissalToUndo = nil
+          return
+        }
+      }
+    }
+  }
+
+  func pauseDismissalUndo(_ paused: Bool, source: UUID) {
+    if paused { dismissalUndoPauses.insert(source) }
+    else { dismissalUndoPauses.remove(source) }
   }
 
   func undoDismissal() {
     guard let dismissal = dismissalToUndo else { return }
+    dismissalUndoTask?.cancel()
+    dismissalUndoTask = nil
     dismissalToUndo = nil
     guard preferences.dismissedRevisions[dismissal.id] == dismissal.revision else { return }
     preferences.dismissedRevisions[dismissal.id] = dismissal.previousRevision

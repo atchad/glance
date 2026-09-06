@@ -48,16 +48,8 @@ struct DashboardView: View {
         }
       }
       if let dismissal = store.dismissalToUndo {
-        HStack {
-          Text("Dismissed “\(dismissal.title)”")
-            .lineLimit(1)
-            .help(dismissal.title)
-          Spacer()
-          Button("Undo", action: store.undoDismissal)
-            .help("Restore the last dismissed pull request")
-        }
-        .font(.caption)
-        .padding(.horizontal, 13).padding(.vertical, 8)
+        DismissalUndoBanner(store: store, title: dismissal.title)
+          .padding(.horizontal, 10).padding(.vertical, 6)
       }
       Divider()
       footer
@@ -339,6 +331,58 @@ struct DashboardView: View {
     }
     .font(.caption).foregroundStyle(.secondary)
     .padding(.horizontal, 13).padding(.vertical, 8)
+  }
+}
+
+private struct DismissalUndoBanner: View {
+  @ObservedObject var store: AppStore
+  let title: String
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @State private var isHovered = false
+  @State private var pauseID = UUID()
+  @FocusState private var isFocused: Bool
+  @AccessibilityFocusState private var isAccessibilityFocused: Bool
+
+  var body: some View {
+    HStack(spacing: 10) {
+      Image(systemName: "arrow.uturn.backward.circle.fill")
+        .foregroundStyle(.secondary)
+        .accessibilityHidden(true)
+      Text("Dismissed “\(title)”")
+        .font(.callout)
+        .lineLimit(1)
+        .help(title)
+      Spacer(minLength: 0)
+      Button("Undo", action: store.undoDismissal)
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .focused($isFocused)
+        .accessibilityFocused($isAccessibilityFocused)
+        .help("Restore the last dismissed pull request")
+    }
+    .padding(10)
+    .background(alignment: .leading) {
+      GeometryReader { geometry in
+        Color.accentColor.opacity(0.10)
+          .frame(width: geometry.size.width * (reduceMotion ? 1 : store.dismissalUndoProgress))
+          .animation(reduceMotion ? nil : .linear(duration: 0.05), value: store.dismissalUndoProgress)
+      }
+      .accessibilityHidden(true)
+    }
+    .background(.regularMaterial)
+    .clipShape(RoundedRectangle(cornerRadius: 9))
+    .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(.separator.opacity(0.5)))
+    .onHover { hovered in
+      isHovered = hovered
+      store.pauseDismissalUndo(hovered || isFocused || isAccessibilityFocused, source: pauseID)
+    }
+    .onChange(of: isFocused) { _, _ in updatePause() }
+    .onChange(of: isAccessibilityFocused) { _, _ in updatePause() }
+    .onDisappear { store.pauseDismissalUndo(false, source: pauseID) }
+  }
+
+  private func updatePause() {
+    store.pauseDismissalUndo(isHovered || isFocused || isAccessibilityFocused, source: pauseID)
   }
 }
 

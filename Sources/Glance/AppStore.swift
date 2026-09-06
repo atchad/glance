@@ -14,6 +14,7 @@ final class AppStore: ObservableObject {
   @Published private(set) var viewerLogin: String?
   @Published private(set) var isRefreshing = false
   @Published private(set) var lastUpdated: Date?
+  @Published private(set) var isShowingCachedData = false
   @Published var errorMessage: String?
   @Published private(set) var refreshBlockedUntil: Date?
   @Published private(set) var storageIssues: [String: String] = [:]
@@ -113,6 +114,7 @@ final class AppStore: ObservableObject {
     preferences = loaded
     Self.applyAppearance(loaded.appearanceMode)
     if let cache = load(GlanceCache.self, from: cacheURL) {
+      isShowingCachedData = true
       let cachedSnapshots = Dictionary(
         cache.snapshots.map { ($0.id, $0.pullRequests) }, uniquingKeysWith: { first, _ in first })
       snapshots = Self.removingExcludedRepositories(
@@ -312,6 +314,8 @@ final class AppStore: ObservableObject {
           ? PRTransition.detect(previous: previousUnique, current: nextUnique,
             enabledEvents: preferences.notificationEvents) : []
         snapshots = nextSnapshots
+        // Failed sections may retain disk-loaded snapshots until a complete refresh.
+        if sectionErrors.isEmpty { isShowingCachedData = false }
         let hasSuccessfulSection = sectionErrors.isEmpty
           || result.snapshots.contains(where: { $0.errorMessage == nil })
         if hasSuccessfulSection { hasNotificationBaseline = true }

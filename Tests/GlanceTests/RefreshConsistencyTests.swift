@@ -84,6 +84,34 @@ final class RefreshConsistencyTests: XCTestCase {
     XCTAssertEqual(store.lastUpdated, lastSuccess)
   }
 
+  func testCacheProvenancePersistsThroughPartialFailureUntilCompleteRefresh() async throws {
+    let directory = try storage()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let initial = AppStore(storageDirectory: directory) { sections in
+      ("viewer", sections.map { SectionSnapshot(id: $0.id, pullRequests: []) })
+    }
+    XCTAssertFalse(initial.isShowingCachedData)
+    initial.refresh()
+    await finish(initial)
+    let gate = FetchGate()
+    let restored = AppStore(storageDirectory: directory, fetchSnapshots: gate.fetch)
+    XCTAssertTrue(restored.isShowingCachedData)
+    restored.refresh()
+    await gate.waitForRequest(1)
+    gate.pending.removeFirst().resume(returning: ("viewer", restored.preferences.sections.enumerated().map {
+      SectionSnapshot(id: $0.element.id, pullRequests: [], errorMessage: $0.offset == 0 ? "Unavailable" : nil)
+    }))
+    await finish(restored)
+    XCTAssertTrue(restored.isShowingCachedData)
+    restored.refresh()
+    await gate.waitForRequest(2)
+    gate.pending.removeFirst().resume(returning: ("viewer", restored.preferences.sections.map {
+      SectionSnapshot(id: $0.id, pullRequests: [])
+    }))
+    await finish(restored)
+    XCTAssertFalse(restored.isShowingCachedData)
+  }
+
   private func storage() throws -> URL {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

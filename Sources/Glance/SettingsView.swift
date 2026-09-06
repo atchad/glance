@@ -470,9 +470,7 @@ private struct RepositoryNotificationPicker: View {
 
 private struct SectionSettingsView: View {
   @ObservedObject var store: AppStore
-  @State private var draftName = ""
-  @State private var draftQuery = "is:pr is:open "
-  @State private var validation = SearchQueryValidation()
+  @State private var draft = SectionQueryDraft()
 
   var body: some View {
     VStack(spacing: 0) {
@@ -526,54 +524,64 @@ private struct SectionSettingsView: View {
       Divider()
 
       VStack(alignment: .leading, spacing: 10) {
-        Text("Add section")
-          .font(.headline)
+        HStack {
+          Text("Add section")
+            .font(.headline)
+          Spacer()
+          Menu("Examples") {
+            ForEach(SectionQueryExample.allCases) { example in
+              Button(example.menuTitle) { draft.apply(example) }
+            }
+          }
+          .fixedSize()
+          .help("Fill the new section draft with an editable example")
+        }
         HStack(spacing: 8) {
-          TextField("Section name", text: $draftName)
+          TextField("Section name", text: $draft.name)
             .textFieldStyle(.roundedBorder)
             .frame(width: 150)
-          TextField("GitHub search", text: $draftQuery)
+          TextField("GitHub search", text: $draft.query)
             .textFieldStyle(.roundedBorder)
             .font(.system(.body, design: .monospaced))
-            .onChange(of: draftQuery) { _, _ in validation.reset() }
           Button {
-            let query = draftQuery
-            let request = validation.begin()
+            let query = draft.query
+            guard let request = draft.beginValidation() else { return }
             Task {
               let error = await store.validateSectionQuery(query)
-              guard query == draftQuery else { return }
-              validation.finish(request, error: error)
+              guard query == draft.query else { return }
+              draft.validation.finish(request, error: error)
             }
           } label: {
-            if validation.state == .validating {
+            if draft.validation.state == .validating {
               ProgressView().controlSize(.small).frame(width: 48)
             } else {
               Text("Validate")
             }
           }
-          .disabled(validation.state == .validating)
+          .disabled(draft.validation.state == .validating || draft.requiresRepositoryReplacement)
           .help("Validate this search with GitHub")
           Button {
-            guard !draftName.trimmingCharacters(in: .whitespaces).isEmpty,
-              !draftQuery.trimmingCharacters(in: .whitespaces).isEmpty
-            else { return }
-            store.preferences.sections.append(PRSection(name: draftName, query: draftQuery))
-            draftName = ""
-            draftQuery = "is:pr is:open "
-            validation.reset()
+            guard draft.canAdd else { return }
+            store.preferences.sections.append(PRSection(name: draft.name, query: draft.query))
+            draft = SectionQueryDraft()
             store.refresh()
           } label: {
             Image(systemName: "plus")
           }
           .buttonStyle(.bordered)
-          .disabled(
-            validation.state != .valid
-              || draftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-          )
+          .disabled(!draft.canAdd)
           .help("Add section")
         }
-        validationMessage
-          .frame(maxWidth: .infinity, alignment: .leading)
+        if draft.requiresRepositoryReplacement {
+          Label("Replace OWNER/REPOSITORY with a repository, such as apple/swift, before validating.",
+            systemImage: "pencil")
+            .font(.caption).foregroundStyle(.secondary)
+        } else {
+          validationMessage
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        Text("Other visibility preferences still apply. A valid search may have no matching or visible pull requests.")
+          .font(.caption).foregroundStyle(.secondary)
       }
       .padding(16)
       .background(.bar)
@@ -582,7 +590,7 @@ private struct SectionSettingsView: View {
 
   @ViewBuilder
   private var validationMessage: some View {
-    switch validation.state {
+    switch draft.validation.state {
     case .idle:
       Text("Validate a GitHub pull request search before adding it.")
         .font(.caption).foregroundStyle(.secondary)

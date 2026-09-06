@@ -25,6 +25,7 @@ Glance keeps your GitHub pull requests one click away in the menu bar. Open its 
 - Notifies you when a new review request arrives.
 - Can notify you when reviews, checks, merge readiness, or merge-queue state changes.
 - Lets you pin important pull requests or snooze them until later, until checks finish, or until the pull request changes.
+- Read the full title and fetched check details using a row’s info button or I on the selected row. Copy title preserves the exact title. Check details identify cached data and may omit checks that exist on GitHub.
 - Supports local search, keyboard triage, and an optional system-wide shortcut for the panel. J/K or arrows traverse expanded search results; Return opens, D dismisses, and P toggles a pin on the selected row. Duplicate PRs are visited in section order. Hiding a selected row clears selection. Slash focuses search, where normal text editing takes precedence.
 - Lets you choose which repositories appear in the app and can generate notifications.
 - Keeps the last successful results visible when GitHub is temporarily unavailable.
@@ -66,7 +67,7 @@ Dismissed reviews do not count as your approval, so they remain visible under th
 
 Glance starts with sections for pull requests requesting your review and pull requests you opened. In Settings, you can:
 
-- Add, rename, reorder, or remove sections backed by validated GitHub pull-request searches.
+- Add, rename, reorder, or remove sections backed by validated GitHub pull-request searches. The Add section Examples menu fills editable drafts for assigned PRs, your non-draft PRs, or a repository. Replace the repository template, validate, then add; visibility preferences still apply.
 - Include or exclude repositories with search and bulk selection.
 - Choose which pull requests contribute to the menu-bar count, including whether review requests
   also count pull requests you opened.

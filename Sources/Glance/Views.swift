@@ -10,6 +10,7 @@ struct DashboardView: View {
   var openSettings: (() -> Void)?
   var didOpenPullRequest: (() -> Void)?
   @State private var searchText = ""
+  @State private var detailRowID: DashboardNavigation.RowID?
   @State private var selectedPullRequestID: DashboardNavigation.RowID?
   @FocusState private var isSearchFocused: Bool
   @FocusState private var isDashboardFocused: Bool
@@ -67,47 +68,64 @@ struct DashboardView: View {
     }
     .onAppear { isDashboardFocused = true }
     .onChange(of: navigation.rows.map(\.id)) { _, _ in
-      selectedPullRequestID = navigation.reconciled(selectedPullRequestID)
+      let reconciledSelection = navigation.reconciled(selectedPullRequestID)
+      let lostFocusedRow = reconciledSelection != selectedPullRequestID
+        || navigation.reconciled(detailRowID) != detailRowID
+      selectedPullRequestID = reconciledSelection
+      detailRowID = navigation.reconciled(detailRowID)
+      if lostFocusedRow, !isSearchFocused {
+        // A removed AppKit trigger can leave the panel itself as first responder.
+        // Restore focus after SwiftUI has removed the row and dismissed its popover.
+        isDashboardFocused = false
+        DispatchQueue.main.async {
+          if !isSearchFocused, detailRowID == nil { isDashboardFocused = true }
+        }
+      }
     }
     .onKeyPress(.downArrow) {
-      guard !isSearchFocused else { return .ignored }
+      guard !isSearchFocused, detailRowID == nil else { return .ignored }
       moveSelection(by: 1)
       return .handled
     }
     .onKeyPress(.upArrow) {
-      guard !isSearchFocused else { return .ignored }
+      guard !isSearchFocused, detailRowID == nil else { return .ignored }
       moveSelection(by: -1)
       return .handled
     }
     .onKeyPress("j") {
-      guard !isSearchFocused else { return .ignored }
+      guard !isSearchFocused, detailRowID == nil else { return .ignored }
       moveSelection(by: 1)
       return .handled
     }
     .onKeyPress("k") {
-      guard !isSearchFocused else { return .ignored }
+      guard !isSearchFocused, detailRowID == nil else { return .ignored }
       moveSelection(by: -1)
       return .handled
     }
     .onKeyPress("/") {
-      guard !isSearchFocused else { return .ignored }
+      guard !isSearchFocused, detailRowID == nil else { return .ignored }
       isSearchFocused = true
       return .handled
     }
     .onKeyPress(.return) {
-      guard !isSearchFocused else { return .ignored }
+      guard !isSearchFocused, detailRowID == nil else { return .ignored }
       return performSelected { openPullRequest($0) }
     }
+    .onKeyPress("i") {
+      guard !isSearchFocused, detailRowID == nil, let selectedPullRequestID else { return .ignored }
+      detailRowID = selectedPullRequestID
+      return .handled
+    }
     .onKeyPress("d") {
-      guard !isSearchFocused else { return .ignored }
+      guard !isSearchFocused, detailRowID == nil else { return .ignored }
       return performSelected { store.dismiss($0) }
     }
     .onKeyPress("p") {
-      guard !isSearchFocused else { return .ignored }
+      guard !isSearchFocused, detailRowID == nil else { return .ignored }
       return performSelected { store.togglePin($0) }
     }
     .onKeyPress("r") {
-      guard !isSearchFocused else { return .ignored }
+      guard !isSearchFocused, detailRowID == nil else { return .ignored }
       store.refresh()
       return .handled
     }
@@ -230,7 +248,14 @@ struct DashboardView: View {
               snooze: { store.snooze(pullRequest, condition: $0) },
               isPinned: store.preferences.pinnedPullRequests.contains(pullRequest.id),
               isSelected: selectedPullRequestID == rowID(section, pullRequest),
-              select: { selectedPullRequestID = rowID(section, pullRequest) }
+              select: { selectedPullRequestID = rowID(section, pullRequest) },
+              navigate: moveSelection,
+              isShowingDetails: Binding(
+                get: { detailRowID == rowID(section, pullRequest) },
+                set: { detailRowID = $0 ? rowID(section, pullRequest) : nil }),
+              checksAreCached: store.isShowingCachedData || store.errorMessage != nil
+                || store.sectionErrors[section.id] != nil
+                || store.lastUpdated.map { Date().timeIntervalSince($0) > store.preferences.refreshInterval } != false
             )
             .id(rowID(section, pullRequest))
             if pullRequest.id != items.last?.id {
@@ -307,12 +332,14 @@ struct DashboardView: View {
   }
 
   private func moveSelection(by offset: Int) {
+    isDashboardFocused = true
     selectedPullRequestID = navigation.moved(from: selectedPullRequestID, by: offset)
   }
 
   private func performSelected(_ action: (PullRequest) -> Void) -> KeyPress.Result {
     guard let pullRequest = navigation.pullRequest(for: selectedPullRequestID)
     else { return .ignored }
+    if !isSearchFocused { isDashboardFocused = true }
     action(pullRequest)
     return .handled
   }
@@ -528,6 +555,10 @@ private struct PullRequestRow: View {
   let isPinned: Bool
   let isSelected: Bool
   let select: () -> Void
+  let navigate: (Int) -> Void
+  @Binding var isShowingDetails: Bool
+  let checksAreCached: Bool
+  @State private var detailFocusRequest = 0
   @State private var hovering = false
 
   private var displayedDate: Date {
@@ -538,6 +569,30 @@ private struct PullRequestRow: View {
   }
 
   var body: some View {
+    ZStack(alignment: .topTrailing) {
+      rowButton
+      DetailActionButton(
+        label: "Details for \(pullRequest.repository) #\(pullRequest.number)",
+        focusRequest: detailFocusRequest,
+        navigate: navigate
+      ) {
+        select()
+        isShowingDetails = true
+      }
+      .frame(width: 28, height: 22)
+      .padding(.top, 4).padding(.trailing, 5)
+      .popover(isPresented: $isShowingDetails, arrowEdge: .trailing) {
+        PullRequestDetailsView(pullRequest: pullRequest, checksAreCached: checksAreCached) {
+          isShowingDetails = false
+        }
+      }
+      .onChange(of: isShowingDetails) { _, showing in
+        if !showing { detailFocusRequest += 1 }
+      }
+    }
+  }
+
+  private var rowButton: some View {
     Button(action: handleClick) {
       VStack(alignment: .leading, spacing: 4) {
         HStack(spacing: 4) {
@@ -556,6 +611,7 @@ private struct PullRequestRow: View {
               .accessibilityLabel("Pinned pull request")
           }
         }
+        .padding(.trailing, 24)
         Text(pullRequest.title).font(.callout).foregroundStyle(.primary).lineLimit(2)
           .multilineTextAlignment(.leading)
         if preferences.showAttentionReason, pullRequest.attention.reason != .draft {

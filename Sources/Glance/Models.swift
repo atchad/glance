@@ -429,7 +429,15 @@ struct Preferences: Codable {
     let showsRerequested: Bool
   }
 
-  var refreshInterval: TimeInterval = 60
+  private(set) var recoveredInvalidValues = false
+
+  var refreshInterval: TimeInterval = 60 {
+    didSet { refreshInterval = Self.normalizedRefreshInterval(refreshInterval) }
+  }
+
+  static func normalizedRefreshInterval(_ interval: TimeInterval) -> TimeInterval {
+    interval.isFinite && (15...900).contains(interval) ? interval : 60
+  }
   var appearanceMode: AppearanceMode = .system
   var panelLevel: PanelLevel = .floating
   var openPanelAtLaunch = false
@@ -486,13 +494,22 @@ struct Preferences: Codable {
 
   init(from decoder: Decoder) throws {
     let values = try decoder.container(keyedBy: CodingKeys.self)
-    refreshInterval = try values.decodeIfPresent(TimeInterval.self, forKey: .refreshInterval) ?? 60
+    let storedInterval = try? values.decode(TimeInterval.self, forKey: .refreshInterval)
+    refreshInterval = Self.normalizedRefreshInterval(storedInterval ?? 60)
+    recoveredInvalidValues = values.contains(.refreshInterval)
+      && (storedInterval == nil || storedInterval != refreshInterval)
     appearanceMode =
       try values.decodeIfPresent(AppearanceMode.self, forKey: .appearanceMode) ?? .system
     panelLevel = try values.decodeIfPresent(PanelLevel.self, forKey: .panelLevel) ?? .floating
     openPanelAtLaunch = try values.decodeIfPresent(Bool.self, forKey: .openPanelAtLaunch) ?? false
     openAtLogin = try values.decodeIfPresent(Bool.self, forKey: .openAtLogin) ?? true
     sections = try values.decodeIfPresent([PRSection].self, forKey: .sections) ?? PRSection.defaults
+    var sectionIDs: Set<UUID> = []
+    sections = sections.filter {
+      let unique = sectionIDs.insert($0.id).inserted
+      if !unique { recoveredInvalidValues = true }
+      return unique
+    }
     menuBarCountMode =
       try values.decodeIfPresent(MenuBarCountMode.self, forKey: .menuBarCountMode)
       ?? .awaitingReview

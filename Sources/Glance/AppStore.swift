@@ -14,6 +14,14 @@ final class AppStore: ObservableObject {
   @Published private(set) var isRefreshing = false
   @Published private(set) var lastUpdated: Date?
   @Published var errorMessage: String?
+  @Published private(set) var storageIssues: [String: String] = [:]
+  private var blockedStorageURLs: Set<URL> = []
+  private var isLoadingStorage = true
+
+  var storageErrorMessage: String? {
+    guard !storageIssues.isEmpty else { return nil }
+    return storageIssues.sorted { $0.key < $1.key }.map(\.value).joined(separator: "\n")
+  }
   @Published private(set) var connectionIssue: AppConnectionIssue?
   @Published private(set) var loginItemErrorMessage: String?
   @Published private(set) var notificationAuthorizationMessage: String?
@@ -22,6 +30,7 @@ final class AppStore: ObservableObject {
   @Published private(set) var repositoryLoadError: String?
   @Published var preferences: Preferences {
     didSet {
+      guard !isLoadingStorage else { return }
       if oldValue.sections.map(\.id) != preferences.sections.map(\.id)
         || zip(oldValue.sections, preferences.sections).contains(where: { $0.query != $1.query })
       {
@@ -62,7 +71,8 @@ final class AppStore: ObservableObject {
     preferencesURL = directory.appending(path: "preferences.json")
     cacheURL = directory.appending(path: "cache.json")
     self.fetchSnapshots = fetchSnapshots
-    var loaded = Self.load(Preferences.self, from: preferencesURL) ?? .default
+    preferences = .default
+    var loaded = load(Preferences.self, from: preferencesURL) ?? .default
     for index in loaded.sections.indices {
       switch loaded.sections[index].name {
       case "Needs My Review": loaded.sections[index].name = "For Review"
@@ -80,9 +90,9 @@ final class AppStore: ObservableObject {
     }
     preferences = loaded
     Self.applyAppearance(loaded.appearanceMode)
-    if let cache = Self.load(GlanceCache.self, from: cacheURL) {
+    if let cache = load(GlanceCache.self, from: cacheURL) {
       let cachedSnapshots = Dictionary(
-        uniqueKeysWithValues: cache.snapshots.map { ($0.id, $0.pullRequests) })
+        cache.snapshots.map { ($0.id, $0.pullRequests) }, uniquingKeysWith: { first, _ in first })
       snapshots = Self.removingExcludedRepositories(
         from: cachedSnapshots,
         excluded: preferences.excludedRepositories
@@ -92,6 +102,7 @@ final class AppStore: ObservableObject {
       hasNotificationBaseline = true
       if !preferences.excludedRepositories.isEmpty { saveCache() }
     }
+    isLoadingStorage = false
   }
 
   var needsReviewCount: Int {
@@ -472,7 +483,7 @@ final class AppStore: ObservableObject {
     return Set(matchingIDs).count
   }
 
-  private func savePreferences() { Self.save(preferences, to: preferencesURL) }
+  private func savePreferences() { save(preferences, to: preferencesURL) }
 
   private func saveCache() {
     let cache = GlanceCache(
@@ -487,7 +498,7 @@ final class AppStore: ObservableObject {
           })
       }
     )
-    Self.save(cache, to: cacheURL)
+    save(cache, to: cacheURL)
   }
 
   private static var supportDirectory: URL {
@@ -497,18 +508,57 @@ final class AppStore: ObservableObject {
     return directory
   }
 
-  private static func load<T: Decodable>(_ type: T.Type, from url: URL) -> T? {
-    guard let data = try? Data(contentsOf: url) else { return nil }
-    let decoder = JSONDecoder()
-    decoder.dateDecodingStrategy = .iso8601
-    return try? decoder.decode(type, from: data)
+  private func load<T: Decodable>(_ type: T.Type, from url: URL) -> T? {
+    do {
+      let data = try Data(contentsOf: url)
+      let decoder = JSONDecoder()
+      decoder.dateDecodingStrategy = .iso8601
+      let value = try decoder.decode(type, from: data)
+      let recoveredPreferences = (value as? Preferences)?.recoveredInvalidValues == true
+      let cache = value as? GlanceCache
+      let duplicateSnapshots = cache.map {
+        Set($0.snapshots.map(\.id)).count != $0.snapshots.count
+      } ?? false
+      if recoveredPreferences || duplicateSnapshots {
+        preserveOriginal(at: url, reason: "Recovered invalid values in")
+      }
+      return value
+    } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+      return nil
+    } catch {
+      preserveOriginal(at: url, reason: "Couldn’t read")
+      return nil
+    }
   }
 
-  private static func save<T: Encodable>(_ value: T, to url: URL) {
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-    encoder.dateEncodingStrategy = .iso8601
-    guard let data = try? encoder.encode(value) else { return }
-    try? data.write(to: url, options: .atomic)
+  private func preserveOriginal(at url: URL, reason: String) {
+    let name = url.lastPathComponent
+    let backup = url.appendingPathExtension("recovery-" + UUID().uuidString)
+    do {
+      try FileManager.default.copyItem(at: url, to: backup)
+      storageIssues[name + "-load"] =
+        "\(reason) \(name). A recovery copy was saved beside the original."
+    } catch {
+      blockedStorageURLs.insert(url)
+      storageIssues[name + "-load"] =
+        "\(reason) \(name). Couldn’t preserve it. Saving this file is disabled; the original is unchanged."
+    }
+  }
+
+  private func save<T: Encodable>(_ value: T, to url: URL) {
+    guard !blockedStorageURLs.contains(url) else { return }
+    let key = url.lastPathComponent + "-save"
+    do {
+      let encoder = JSONEncoder()
+      encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+      encoder.dateEncodingStrategy = .iso8601
+      let data = try encoder.encode(value)
+      try FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try data.write(to: url, options: .atomic)
+      storageIssues.removeValue(forKey: key)
+    } catch {
+      storageIssues[key] = "Couldn’t save \(url.lastPathComponent). Recent changes may not survive quitting."
+    }
   }
 }

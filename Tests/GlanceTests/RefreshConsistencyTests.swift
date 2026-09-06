@@ -45,6 +45,22 @@ final class RefreshConsistencyTests: XCTestCase {
     XCTAssertEqual(store.viewerLogin, "current")
   }
 
+  func testFailedInitialSectionsDoNotCreateLoadedEmptyCache() async throws {
+    let directory = try storage()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let store = AppStore(storageDirectory: directory) { sections in
+      ("", sections.map {
+        SectionSnapshot(id: $0.id, pullRequests: [], errorMessage: "Invalid query")
+      })
+    }
+    store.refresh()
+    await finish(store)
+    XCTAssertNil(store.lastUpdated)
+    XCTAssertNil(store.menuBarCount)
+    XCTAssertFalse(store.sectionErrors.isEmpty)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appending(path: "cache.json").path))
+  }
+
   private func storage() throws -> URL {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

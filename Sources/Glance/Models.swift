@@ -305,6 +305,7 @@ struct PRSection: Codable, Identifiable, Hashable {
 struct SectionSnapshot: Codable, Identifiable {
   let id: UUID
   let pullRequests: [PullRequest]
+  var errorMessage: String? = nil
 }
 
 struct GlanceCache: Codable {

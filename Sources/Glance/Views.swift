@@ -196,9 +196,17 @@ struct DashboardView: View {
     let items = navigation.items(in: section.id)
     Section {
       if !section.isCollapsed {
+        if let error = store.sectionErrors[section.id] {
+          Label(error, systemImage: "exclamationmark.triangle")
+            .font(.caption).foregroundStyle(.orange)
+            .textSelection(.enabled)
+            .padding(.horizontal, 13).padding(.vertical, 6)
+        }
         if items.isEmpty {
           Text(
             store.isRefreshing ? "Checking…"
+              : store.sectionErrors[section.id] != nil ? "No saved pull requests"
+              : store.snapshots[section.id] == nil ? "Not loaded yet"
               : searchText.isEmpty ? "No pull requests" : "No matches")
             .font(.caption).foregroundStyle(.tertiary)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -239,7 +247,9 @@ struct DashboardView: View {
             .font(.caption2.weight(.bold)).foregroundStyle(.secondary)
           Text(section.name).font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
           Spacer()
-          Text("\(items.count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+          Text(store.snapshots[section.id] == nil || store.sectionErrors[section.id] != nil
+            ? "—" : "\(items.count)")
+            .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
         }
         .padding(.horizontal, 13).padding(.vertical, 5)
         .contentShape(Rectangle())
@@ -848,9 +858,10 @@ private struct GitHubUnavailableView: View {
 
   var body: some View {
     ContentUnavailableView {
-      Label("GitHub is unavailable", systemImage: "icloud.slash")
+      Label("Couldn’t refresh pull requests", systemImage: "icloud.slash")
     } description: {
-      Text("Glance will retry automatically. No saved pull requests are available yet.")
+      Text(store.errorMessage ?? "Try refreshing again.")
+        .textSelection(.enabled)
     } actions: {
       Button("Try Again") { store.refresh() }
         .help("Retry GitHub now")

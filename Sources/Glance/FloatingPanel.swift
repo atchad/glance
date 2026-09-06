@@ -7,25 +7,25 @@ final class FloatingPanelController: NSObject, ObservableObject, NSWindowDelegat
   private var panel: NSPanel?
   private var openSettingsAction: () -> Void = {}
   private var titleBarMonitor: Any?
-  private var frameBeforeZoom: NSRect?
+  private var frameBeforeFill: NSRect?
 
   deinit {
     if let titleBarMonitor { NSEvent.removeMonitor(titleBarMonitor) }
   }
-
   init(store: AppStore) { self.store = store }
 
   func setOpenSettingsAction(_ action: @escaping () -> Void) {
     openSettingsAction = action
   }
 
-  var isVisible: Bool { panel?.isVisible == true }
+  var isVisible: Bool { panel?.isVisible == true && panel?.isMiniaturized == false }
 
   func toggle() { isVisible ? hide() : show() }
 
   func show() {
     let panel = panel ?? makePanel()
     applyLevel()
+    if panel.isMiniaturized { panel.deminiaturize(nil) }
     panel.orderFrontRegardless()
     NSApp.activate(ignoringOtherApps: true)
     objectWillChange.send()
@@ -51,7 +51,7 @@ final class FloatingPanelController: NSObject, ObservableObject, NSWindowDelegat
     let initialContentRect = NSRect(x: 80, y: 160, width: 410, height: 620)
     let panel = NSPanel(
       contentRect: initialContentRect,
-      styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+      styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
       backing: .buffered,
       defer: false
     )
@@ -94,30 +94,44 @@ final class FloatingPanelController: NSObject, ObservableObject, NSWindowDelegat
 
   private func saveFrame() {
     guard let panel else { return }
-    guard frameBeforeZoom == nil else { return }
+    guard frameBeforeFill == nil else { return }
     UserDefaults.standard.set(NSStringFromRect(panel.frame), forKey: "floatingPanelFrame")
   }
 
   private func installTitleBarMonitor(for panel: NSPanel) {
     titleBarMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) {
       [weak self, weak panel] event in
-      guard let self, let panel, event.window === panel, event.clickCount == 2 else { return event }
-      let titleBarBottom = panel.contentLayoutRect.maxY
-      guard event.locationInWindow.y >= titleBarBottom else { return event }
-      self.toggleZoom(panel)
+      guard let self, let panel, event.window === panel, event.clickCount == 2,
+        event.locationInWindow.y >= panel.contentLayoutRect.maxY else { return event }
+      let preference = UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick")
+      if preference == nil || preference == "Maximize" || preference == "Zoom" {
+        self.frameBeforeFill = nil
+      }
+      Self.performTitleBarAction(
+        for: panel, preference: preference, fill: { self.toggleFill(panel) })
       return nil
     }
   }
 
-  private func toggleZoom(_ panel: NSPanel) {
-    if let restoreFrame = frameBeforeZoom {
+  static func performTitleBarAction(for panel: NSPanel, preference: String?, fill: () -> Void) {
+    switch preference ?? "Maximize" {
+    case "Minimize": panel.miniaturize(nil)
+    case "Fill": fill()
+    // macOS stores the system settings “Zoom” choice as “Maximize”.
+    case "Maximize", "Zoom": panel.performZoom(nil)
+    default: break
+    }
+  }
+
+  private func toggleFill(_ panel: NSPanel) {
+    if let restoreFrame = frameBeforeFill {
       panel.setFrame(restoreFrame, display: true, animate: true)
-      frameBeforeZoom = nil
+      frameBeforeFill = nil
       saveFrame()
       return
     }
     guard let screen = panel.screen ?? NSScreen.main else { return }
-    frameBeforeZoom = panel.frame
+    frameBeforeFill = panel.frame
     panel.setFrame(screen.visibleFrame, display: true, animate: true)
   }
 

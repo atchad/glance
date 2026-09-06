@@ -61,6 +61,29 @@ final class RefreshConsistencyTests: XCTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appending(path: "cache.json").path))
   }
 
+  func testGlobalFailureDoesNotPresentCachedZeroAsAllClear() async throws {
+    let directory = try storage()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let gate = FetchGate()
+    let store = AppStore(storageDirectory: directory, fetchSnapshots: gate.fetch)
+    store.preferences.menuBarCountMode = .allShown
+    store.refresh()
+    await gate.waitForRequest(1)
+    gate.pending.removeFirst().resume(returning: ("viewer", store.preferences.sections.map {
+      SectionSnapshot(id: $0.id, pullRequests: [])
+    }))
+    await finish(store)
+    XCTAssertEqual(store.menuBarCount, 0)
+    let lastSuccess = store.lastUpdated
+    store.refresh()
+    await gate.waitForRequest(2)
+    gate.pending.removeFirst().resume(throwing: GitHubError.api("Connection failed"))
+    await finish(store)
+    XCTAssertNotNil(store.errorMessage)
+    XCTAssertNil(store.menuBarCount)
+    XCTAssertEqual(store.lastUpdated, lastSuccess)
+  }
+
   private func storage() throws -> URL {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

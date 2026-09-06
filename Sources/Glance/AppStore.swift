@@ -138,7 +138,7 @@ final class AppStore: ObservableObject {
   }
 
   var menuBarCount: Int? {
-    guard lastUpdated != nil, sectionErrors.isEmpty,
+    guard lastUpdated != nil, errorMessage == nil, sectionErrors.isEmpty,
       preferences.sections.allSatisfy({ snapshots[$0.id] != nil }) else { return nil }
     return Self.calculateMenuBarCount(
       mode: preferences.menuBarCountMode,

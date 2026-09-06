@@ -63,7 +63,7 @@ struct GitHubCLICredentialProvider: GitHubCredentialProvider {
         throw GitHubError.ghUnavailable
       }
       process.executableURL = URL(fileURLWithPath: executable)
-      process.arguments = ["auth", "token"]
+      process.arguments = ["auth", "token", "--hostname", "github.com"]
       process.standardOutput = output
       process.standardError = errors
       do { try process.run() } catch { throw GitHubError.ghUnavailable }

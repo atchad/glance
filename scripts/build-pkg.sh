@@ -13,7 +13,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-"$repo_root/scripts/build-app.sh" release
+case "${1:-}" in
+  "") "$repo_root/scripts/build-app.sh" release ;;
+  --use-existing-app) ;;
+  *) print -u2 "Usage: $0 [--use-existing-app]"; exit 1 ;;
+esac
+codesign --verify --deep --strict "$app_path"
+lipo "$app_path/Contents/MacOS/Glance" -verify_arch arm64 x86_64
 
 app_version="$(plutil -extract CFBundleShortVersionString raw \
   "$app_path/Contents/Info.plist")"

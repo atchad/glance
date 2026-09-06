@@ -539,7 +539,7 @@ private struct PullRequestRow: View {
           Text(pullRequest.repository).font(.caption.weight(.medium)).foregroundStyle(.secondary)
             .lineLimit(1)
           Text(verbatim: "#\(pullRequest.number)").font(.caption.monospacedDigit()).foregroundStyle(
-            .tertiary)
+            .primary)
           if let position = pullRequest.stackPosition, let size = pullRequest.stackSize, size > 1 {
             StackBadge(position: position, size: size)
           }
@@ -717,9 +717,12 @@ private struct AttentionReasonLabel: View {
   }
 
   var body: some View {
-    Label(summary.message, systemImage: symbol)
+    Label {
+      Text(summary.message).foregroundStyle(.primary)
+    } icon: {
+      Image(systemName: symbol).foregroundStyle(color)
+    }
       .font(.caption2.weight(.medium))
-      .foregroundStyle(color)
       .lineLimit(1)
       .help(summary.message)
       .accessibilityLabel("Attention status: \(summary.message)")

@@ -139,6 +139,10 @@ private struct GeneralSettingsPage: View {
           ForEach(GlobalShortcut.allCases) { shortcut in Text(shortcut.title).tag(shortcut) }
         }
         .help("Choose a system-wide keyboard shortcut for the Glance panel.")
+        if let error = store.shortcutErrorMessage {
+          Label(error, systemImage: "exclamationmark.triangle")
+            .font(.caption).foregroundStyle(.orange)
+        }
       } header: {
         Text("Window")
       } footer: {

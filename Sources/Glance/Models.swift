@@ -453,7 +453,7 @@ struct Preferences: Codable, Equatable {
   var includeMyPullRequestsInMenuBarCount = false
   var showAuthor = true
   var showUpdatedAt = true
-  var showLineChanges = false
+  var showLineChanges = true
   var showCheckStatus = true
   var showReviewStatus = true
   var showAttentionReason = true
@@ -523,7 +523,7 @@ struct Preferences: Codable, Equatable {
       try values.decodeIfPresent(Bool.self, forKey: .includeMyPullRequestsInMenuBarCount) ?? false
     showAuthor = try values.decodeIfPresent(Bool.self, forKey: .showAuthor) ?? true
     showUpdatedAt = try values.decodeIfPresent(Bool.self, forKey: .showUpdatedAt) ?? true
-    showLineChanges = try values.decodeIfPresent(Bool.self, forKey: .showLineChanges) ?? false
+    showLineChanges = try values.decodeIfPresent(Bool.self, forKey: .showLineChanges) ?? true
     showCheckStatus = try values.decodeIfPresent(Bool.self, forKey: .showCheckStatus) ?? true
     showReviewStatus = try values.decodeIfPresent(Bool.self, forKey: .showReviewStatus) ?? true
     showAttentionReason =

@@ -87,6 +87,15 @@ final class ModelsTests: XCTestCase {
     XCTAssertEqual(Date().updatedLabel, "Last updated just now")
   }
 
+  func testLineChangesDefaultOnPreservesSavedOptOut() throws {
+    XCTAssertTrue(Preferences().showLineChanges)
+    let json = """
+      {"refreshInterval":30,"panelLevel":"floating","sections":[],"showLineChanges":false}
+      """
+    let preferences = try JSONDecoder().decode(Preferences.self, from: Data(json.utf8))
+    XCTAssertFalse(preferences.showLineChanges)
+  }
+
   func testOlderPreferencesGainNewDisplayDefaults() throws {
     let json = """
       {"refreshInterval":30,"panelLevel":"floating","sections":[]}
@@ -96,7 +105,7 @@ final class ModelsTests: XCTestCase {
     XCTAssertEqual(preferences.menuBarCountMode, .awaitingReview)
     XCTAssertFalse(preferences.includeMyPullRequestsInMenuBarCount)
     XCTAssertEqual(preferences.appearanceMode, .system)
-    XCTAssertFalse(preferences.showLineChanges)
+    XCTAssertTrue(preferences.showLineChanges)
     XCTAssertTrue(preferences.showCheckStatus)
     XCTAssertTrue(preferences.showReviewStatus)
     XCTAssertTrue(preferences.showAttentionReason)

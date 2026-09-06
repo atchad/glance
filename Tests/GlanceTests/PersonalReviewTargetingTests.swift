@@ -7,7 +7,18 @@ final class PersonalReviewTargetingTests: XCTestCase {
   func testDecodedCustomSectionsUsePersonalRequestsAndVerifiedTeams() async throws {
     let fixtureURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
       .appending(path: "Fixtures/personal-review-section.json")
-    let fixture = try Data(contentsOf: fixtureURL)
+    var fixtureObject = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: fixtureURL)) as? [String: Any])
+    var graph = fixtureObject["data"] as! [String: Any]
+    var search = graph["search"] as! [String: Any]
+    var nodes = search["nodes"] as! [[String: Any]]
+    var history = nodes[0]["timelineItems"] as! [String: Any]
+    history["totalCount"] = 200
+    nodes[0]["timelineItems"] = history
+    nodes[0]["commits"] = ["nodes": [["commit": ["statusCheckRollup": [
+      "state": "FAILURE", "contexts": ["totalCount": 101, "nodes": []]
+    ]]]]]
+    search["nodes"] = nodes; graph["search"] = search; fixtureObject["data"] = graph
+    let fixture = try JSONSerialization.data(withJSONObject: fixtureObject)
     let recorder = RequestRecorder(fixture: fixture)
     FixtureURLProtocol.handler = { try recorder.response(for: $0) }
     defer { FixtureURLProtocol.handler = nil }
@@ -26,6 +37,9 @@ final class PersonalReviewTargetingTests: XCTestCase {
     XCTAssertEqual(result.snapshots[0].pullRequests, result.snapshots[1].pullRequests)
     let prs = Dictionary(uniqueKeysWithValues: result.snapshots[0].pullRequests.map { ($0.id, $0) })
     let direct = try XCTUnwrap(prs["direct"])
+    XCTAssertEqual(direct.reviewRequestHistoryComplete, false)
+    XCTAssertEqual(direct.checkDetailsComplete, false)
+    XCTAssertEqual(direct.checksState, .failure)
     XCTAssertEqual(direct.viewerReviewRequested, true)
     XCTAssertEqual(direct.attention.reason, .reviewRequested)
     XCTAssertEqual(direct.reviewRequestedAt, date(1))

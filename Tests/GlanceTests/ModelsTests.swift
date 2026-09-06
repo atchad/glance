@@ -38,12 +38,13 @@ final class ModelsTests: XCTestCase {
   }
 
   func testFailingCheckMessageIncludesCount() {
-    let pullRequest = makePullRequest(
+    var pullRequest = makePullRequest(
       checks: .failure, viewerDidAuthor: true,
       detailedChecks: [
         .init(name: "test", state: .failure, detailsURL: nil),
         .init(name: "lint", state: .failure, detailsURL: nil),
       ])
+    pullRequest.checkDetailsComplete = true
     XCTAssertEqual(pullRequest.attention.message, "Fix 2 failing checks")
   }
 
@@ -433,6 +434,41 @@ final class ModelsTests: XCTestCase {
     } catch {
       XCTFail("Unexpected error: \(error)")
     }
+  }
+
+  func testIncompleteRequestHistoryDoesNotHideCurrentRequest() throws {
+    var pr = makePullRequest(reviewers: ["atchad"], viewerReviewState: "APPROVED",
+      viewerReviewedHeadOID: "abc123", viewerReviewSubmittedAt: .now)
+    XCTAssertFalse(pr.isHiddenAfterApproval(using: Preferences()))
+    pr.reviewRequestHistoryComplete = true
+    XCTAssertTrue(pr.isHiddenAfterApproval(using: Preferences()))
+    pr.reviewRequestHistoryComplete = false
+    XCTAssertFalse(pr.isHiddenAfterApproval(using: Preferences()))
+    XCTAssertEqual(pr.attention.reason, .reviewRequested)
+    var preferences = Preferences()
+    preferences.showRerequestedPullRequestsAfterApproval = false
+    XCTAssertTrue(pr.isHiddenAfterApproval(using: preferences))
+    let restored = try JSONDecoder().decode(PullRequest.self, from: JSONEncoder().encode(pr))
+    XCTAssertEqual(restored.reviewRequestHistoryComplete, false)
+    var legacy = try JSONSerialization.jsonObject(with: JSONEncoder().encode(pr)) as! [String: Any]
+    legacy.removeValue(forKey: "reviewRequestHistoryComplete")
+    legacy.removeValue(forKey: "checkDetailsComplete")
+    let oldCache = try JSONDecoder().decode(PullRequest.self,
+      from: JSONSerialization.data(withJSONObject: legacy))
+    XCTAssertNil(oldCache.reviewRequestHistoryComplete)
+    XCTAssertFalse(oldCache.isHiddenAfterApproval(using: Preferences()))
+  }
+
+  func testIncompleteChecksDoNotClaimExactFailingCount() {
+    var pr = makePullRequest(checks: .failure, detailedChecks: [
+      .init(name: "A", state: .failure, detailsURL: nil),
+      .init(name: "B", state: .failure, detailsURL: nil)])
+    XCTAssertEqual(pr.attention.message, "Fix failing checks")
+    pr.checkDetailsComplete = true
+    XCTAssertEqual(pr.attention.message, "Fix 2 failing checks")
+    pr.checkDetailsComplete = false
+    XCTAssertEqual(pr.attention.message, "Fix failing checks")
+    XCTAssertEqual(pr.checksState, .failure)
   }
 
   private func makePullRequest(

@@ -61,6 +61,8 @@ struct PullRequest: Codable, Identifiable, Hashable {
 
   // Missing in older caches, whose request dates could belong to another reviewer.
   let viewerReviewRequested: Bool?
+  var reviewRequestHistoryComplete: Bool? = nil
+  var checkDetailsComplete: Bool? = nil
 
   var personalReviewRequestedAt: Date? {
     viewerReviewRequested == nil ? nil : reviewRequestedAt
@@ -116,7 +118,9 @@ struct PullRequest: Codable, Identifiable, Hashable {
         viewerReviewSubmittedAt.map { requestDate > $0 } ?? false
       } ?? false
     if changedSinceApproval && preferences.showChangedPullRequestsAfterApproval { return false }
-    if viewerReviewRequested == true && reviewWasRerequested
+    if viewerReviewRequested == true
+      && (reviewWasRerequested
+        || (personalReviewRequestedAt == nil && reviewRequestHistoryComplete != true))
       && preferences.showRerequestedPullRequestsAfterApproval
     { return false }
     return true
@@ -165,7 +169,7 @@ struct PullRequest: Codable, Identifiable, Hashable {
     }
     if checksState == .failure {
       let count = checks?.filter { $0.state == .failure }.count ?? 0
-      let message = count > 1 ? "Fix \(count) failing checks" : "Fix failing checks"
+      let message = count > 1 && checkDetailsComplete == true ? "Fix \(count) failing checks" : "Fix failing checks"
       return .init(level: .actionRequired, reason: .checksFailing, message: message, priority: 60)
     }
     if let count = unresolvedConversationCount, count > 0 {

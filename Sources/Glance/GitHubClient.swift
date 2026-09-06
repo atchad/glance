@@ -294,6 +294,7 @@ struct GitHubClient {
                 nodes { isResolved }
               }
               timelineItems(last: 50, itemTypes: [REVIEW_REQUESTED_EVENT]) {
+                totalCount
                 nodes {
                   ... on ReviewRequestedEvent {
                     createdAt
@@ -310,6 +311,7 @@ struct GitHubClient {
                     statusCheckRollup {
                       state
                       contexts(first: 100) {
+                        totalCount
                         nodes {
                           ... on CheckRun { name status conclusion detailsUrl }
                           ... on StatusContext { context state targetUrl }
@@ -452,7 +454,10 @@ private struct RawPullRequest: Decodable {
       return nil
     }
   }
-  struct ReviewEventConnection: Decodable { let nodes: [ReviewEvent] }
+  struct ReviewEventConnection: Decodable {
+    let nodes: [ReviewEvent]
+    let totalCount: Int?
+  }
   struct ReviewEvent: Decodable {
     let createdAt: Date
     let requestedReviewer: Reviewer?
@@ -469,7 +474,10 @@ private struct RawPullRequest: Decodable {
   struct CommitNode: Decodable { let commit: Commit }
   struct Commit: Decodable { let statusCheckRollup: Rollup? }
   struct Rollup: Decodable {
-    struct ContextConnection: Decodable { let nodes: [Context] }
+    struct ContextConnection: Decodable {
+      let nodes: [Context]
+      let totalCount: Int?
+    }
     struct Context: Decodable {
       let name: String?
       let context: String?
@@ -603,7 +611,9 @@ private struct RawPullRequest: Decodable {
       checks: detailedChecks,
       autoMergeEnabled: autoMergeRequest != nil,
       mergeQueuePosition: mergeQueueEntry?.position,
-      lifecycleState: lifecycleState, viewerReviewRequested: viewerReviewRequested
+      lifecycleState: lifecycleState, viewerReviewRequested: viewerReviewRequested,
+      reviewRequestHistoryComplete: timelineItems.totalCount.map { $0 <= timelineItems.nodes.count },
+      checkDetailsComplete: rollup?.contexts?.totalCount.map { $0 <= (rollup?.contexts?.nodes.count ?? 0) }
     )
   }
 }

@@ -22,6 +22,12 @@ final class AppStore: ObservableObject {
   @Published private(set) var repositoryLoadError: String?
   @Published var preferences: Preferences {
     didSet {
+      if oldValue.sections.map(\.id) != preferences.sections.map(\.id)
+        || zip(oldValue.sections, preferences.sections).contains(where: { $0.query != $1.query })
+      {
+        refreshGeneration &+= 1
+        if isRefreshing { refreshQueued = true }
+      }
       savePreferences()
       if oldValue.appearanceMode != preferences.appearanceMode {
         Self.applyAppearance(preferences.appearanceMode)
@@ -43,6 +49,8 @@ final class AppStore: ObservableObject {
   private var refreshTask: Task<Void, Never>?
   private var timerTask: Task<Void, Never>?
   private var hasNotificationBaseline = false
+  private var refreshGeneration = 0
+  private var refreshQueued = false
 
   init(
     storageDirectory: URL? = nil,
@@ -211,16 +219,28 @@ final class AppStore: ObservableObject {
   }
 
   func refresh() {
-    guard !isRefreshing else { return }
+    guard !isRefreshing else {
+      refreshQueued = true
+      return
+    }
     refreshTask?.cancel()
     isRefreshing = true
     errorMessage = nil
     connectionIssue = nil
     let sections = preferences.sections
+    let generation = refreshGeneration
     refreshTask = Task { [weak self] in
+      guard let self else { return }
+      defer {
+        isRefreshing = false
+        if refreshQueued {
+          refreshQueued = false
+          refresh()
+        }
+      }
       do {
-        let result = try await self?.fetchSnapshots(sections)
-        guard let self, let result else { return }
+        let result = try await fetchSnapshots(sections)
+        guard generation == refreshGeneration else { return }
         let fetchedSnapshots = Dictionary(
           uniqueKeysWithValues: result.snapshots.map { ($0.id, $0.pullRequests) })
         let nextSnapshots = Self.removingExcludedRepositories(
@@ -248,15 +268,14 @@ final class AppStore: ObservableObject {
         preferences.pinnedPullRequests.formIntersection(activeIDs)
         if !result.viewer.isEmpty { viewerLogin = result.viewer }
         lastUpdated = Date()
-        isRefreshing = false
         saveCache()
         sendNotifications(for: transitions)
       } catch is CancellationError {
-        self?.isRefreshing = false
+        return
       } catch {
-        self?.errorMessage = error.localizedDescription
-        self?.connectionIssue = Self.connectionIssue(for: error)
-        self?.isRefreshing = false
+        guard generation == refreshGeneration else { return }
+        errorMessage = error.localizedDescription
+        connectionIssue = Self.connectionIssue(for: error)
       }
     }
   }

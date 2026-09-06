@@ -19,6 +19,7 @@ struct DashboardView: View {
       header
       searchField
       Divider()
+      if let message = store.storageErrorMessage { errorBanner(message) }
       if store.errorMessage != nil, store.snapshots.isEmpty {
         if store.connectionIssue == .authentication {
           GitHubSetupView(store: store)
@@ -303,9 +304,7 @@ struct DashboardView: View {
 
   private func errorBanner(_ message: String) -> some View {
     Label(
-      store.connectionIssue == .authentication
-        ? "GitHub sign-in needs attention. Showing saved results."
-        : "Refresh unavailable. GitHub may be having issues; your saved results are still shown.",
+      message,
       systemImage: "exclamationmark.triangle.fill"
     )
     .font(.caption).foregroundStyle(.orange)

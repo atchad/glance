@@ -58,8 +58,13 @@ struct DashboardView: View {
       minWidth: 310, idealWidth: surface == .menuBar ? 390 : 410, minHeight: 320, idealHeight: 590
     )
     .background(.regularMaterial)
-    .focusable()
-    .focused($isDashboardFocused)
+    .background {
+      Color.clear
+        .focusable()
+        .focusEffectDisabled()
+        .focused($isDashboardFocused)
+        .accessibilityHidden(true)
+    }
     .onAppear { isDashboardFocused = true }
     .onChange(of: navigation.rows.map(\.id)) { _, _ in
       selectedPullRequestID = navigation.reconciled(selectedPullRequestID)

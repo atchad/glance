@@ -223,7 +223,7 @@ enum PRAttentionLevel: String, Codable {
     switch self {
     case .actionRequired: .orange
     case .waiting: .secondary
-    case .ready: .green
+    case .ready: .statusGreen
     case .informational: .secondary
     }
   }

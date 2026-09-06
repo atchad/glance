@@ -654,7 +654,7 @@ private struct PullRequestRow: View {
   @ViewBuilder private func checkLabel(showText: Bool) -> some View {
     switch pullRequest.checksState {
     case .success:
-      StatusLabel(icon: .checksPassed, text: "Checks passed", color: .green, showText: showText)
+      StatusLabel(icon: .checksPassed, text: "Checks passed", color: .statusGreen, showText: showText)
     case .failure:
       StatusLabel(icon: .checksFailed, text: "Checks failed", color: .red, showText: showText)
     case .pending:
@@ -675,7 +675,7 @@ private struct PullRequestRow: View {
   @ViewBuilder private func reviewLabel(showText: Bool) -> some View {
     switch pullRequest.reviewDecision {
     case "APPROVED":
-      StatusLabel(icon: .approved, text: "Approved", color: .green, showText: showText)
+      StatusLabel(icon: .approved, text: "Approved", color: .statusGreen, showText: showText)
     case "CHANGES_REQUESTED":
       StatusLabel(
         icon: .changesRequested, text: "Changes requested", color: .red, showText: showText)

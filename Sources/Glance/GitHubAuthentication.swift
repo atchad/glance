@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 struct GitHubCredential: Sendable, Equatable {
@@ -38,20 +39,26 @@ struct GitHubSession: Sendable {
 
 struct GitHubCLICredentialProvider: GitHubCredentialProvider {
   private let executableCandidates: [String]
+  private let timeout: TimeInterval
 
   init(
     executableCandidates: [String] = [
       "/opt/homebrew/bin/gh",
       "/usr/local/bin/gh",
       "/usr/bin/gh",
-    ]
+    ],
+    timeout: TimeInterval = 30
   ) {
     self.executableCandidates = executableCandidates
+    self.timeout = timeout
   }
 
   func credential() async throws -> GitHubCredential {
     let candidates = executableCandidates
-    return try await Task.detached(priority: .userInitiated) {
+    let timeout = timeout
+    // Keep Process launch, polling, and cleanup on one thread; only the caller suspends.
+    let task = Task.detached(priority: .userInitiated) {
+      try Task.checkCancellation()
       let process = Process()
       let output = Pipe()
       let errors = Pipe()
@@ -67,18 +74,60 @@ struct GitHubCLICredentialProvider: GitHubCredentialProvider {
       process.standardOutput = output
       process.standardError = errors
       do { try process.run() } catch { throw GitHubError.ghUnavailable }
-      process.waitUntilExit()
-      let token =
-        String(data: output.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+      let handles = [output.fileHandleForReading, errors.fileHandleForReading]
+      defer {
+        if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+        process.waitUntilExit()
+        for handle in handles { try? handle.close() }
+      }
+      for handle in handles {
+        let flags = fcntl(handle.fileDescriptor, F_GETFL)
+        guard flags != -1, fcntl(handle.fileDescriptor, F_SETFL, flags | O_NONBLOCK) != -1 else {
+          throw GitHubError.ghUnavailable
+        }
+      }
+      var captured = [Data(), Data()]
+      var buffer = [UInt8](repeating: 0, count: 16_384)
+      let deadline = ProcessInfo.processInfo.systemUptime + timeout
+      while true {
+        if Task.isCancelled || ProcessInfo.processInfo.systemUptime >= deadline {
+          try Task.checkCancellation()
+          throw GitHubError.api("GitHub CLI timed out. Try refreshing again.")
+        }
+        let running = process.isRunning
+        var receivedData = false
+        for (index, handle) in handles.enumerated() {
+          let count = read(handle.fileDescriptor, &buffer, buffer.count)
+          if count > 0 {
+            guard captured[index].count + count <= 1_048_576 else {
+              throw GitHubError.api("GitHub CLI returned too much output.")
+            }
+            captured[index].append(contentsOf: buffer.prefix(count))
+            receivedData = true
+          } else if count < 0 && errno != EAGAIN && errno != EINTR {
+            throw GitHubError.ghUnavailable
+          }
+        }
+        if !receivedData {
+          if !running { break }
+          usleep(10_000)
+        }
+      }
+      try Task.checkCancellation()
+      let token = String(data: captured[0], encoding: .utf8)?
         .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-      let detail =
-        String(data: errors.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+      let detail = String(data: captured[1], encoding: .utf8)?
         .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
       guard process.terminationStatus == 0, !token.isEmpty else {
         throw GitHubError.notAuthenticated(detail)
       }
       return GitHubCredential(accessToken: token)
-    }.value
+    }
+    return try await withTaskCancellationHandler {
+      try await task.value
+    } onCancel: {
+      task.cancel()
+    }
   }
 }
 

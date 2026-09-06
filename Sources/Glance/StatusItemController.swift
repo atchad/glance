@@ -45,6 +45,10 @@ final class StatusItemController: NSObject, ObservableObject {
       .receive(on: RunLoop.main)
       .sink { [weak self] _, _ in self?.updateButton() }
       .store(in: &cancellables)
+    store.$isRefreshing.combineLatest(store.$lastUpdated, store.$connectionIssue)
+      .receive(on: RunLoop.main)
+      .sink { [weak self] _, _, _ in self?.updateButton() }
+      .store(in: &cancellables)
     updateButton()
   }
 
@@ -85,11 +89,37 @@ final class StatusItemController: NSObject, ObservableObject {
   private func updateButton() {
     guard let button = statusItem.button else { return }
     button.image = Octicon.pullRequest.image
+    button.setAccessibilityLabel("Glance pull requests")
+    button.setAccessibilityHelp("Open the pull request menu")
+    button.setAccessibilityValue(Self.accessibilityValue(
+      count: store.menuBarCount, mode: store.preferences.menuBarCountMode,
+      isRefreshing: store.isRefreshing, lastUpdated: store.lastUpdated,
+      connectionIssue: store.connectionIssue))
     if let count = store.menuBarCount {
       button.title = " \(count)"
     } else {
       button.title = ""
     }
+  }
+
+  static func accessibilityValue(
+    count: Int?, mode: MenuBarCountMode, isRefreshing: Bool, lastUpdated: Date?,
+    connectionIssue: AppConnectionIssue?
+  ) -> String {
+    let countDescription = count.map { "\($0) — \(mode.title)" } ?? "Count hidden"
+    let freshness: String
+    if isRefreshing {
+      freshness = "Refreshing"
+    } else if connectionIssue != nil {
+      freshness = lastUpdated == nil
+        ? "Refresh unavailable; no results loaded"
+        : "Refresh unavailable; showing saved results"
+    } else if let date = lastUpdated {
+      freshness = "Last updated \(date.formatted(date: .abbreviated, time: .shortened))"
+    } else {
+      freshness = "Not refreshed yet"
+    }
+    return "\(countDescription). \(freshness)"
   }
 
   @objc private func openSettings() {

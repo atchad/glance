@@ -19,7 +19,7 @@ Glance keeps your GitHub pull requests one click away in the menu bar. Open its 
 - Shows review requests, pull requests you opened, and any other sections you define with GitHub search queries.
 - Explains why a pull request needs attention, including review requests, new commits, failed
   checks, unresolved conversations, merge conflicts, and merge readiness.
-- Surfaces draft, review, detailed check, merge-queue, auto-merge, and stacked-pull-request status
+- Surfaces draft, review, aggregate check, merge-queue, auto-merge, and stacked-pull-request status
   without opening a browser.
 - Displays an attention count directly in the menu bar.
 - Notifies you when a new review request arrives.
@@ -48,11 +48,13 @@ Glance requires macOS 14 or later and an authenticated installation of [GitHub C
 2. Connect it to GitHub:
 
    ```sh
-   gh auth login
+   gh auth login --hostname github.com
    ```
 
 3. [Download the latest Glance DMG](https://github.com/atchad/glance/releases/latest/download/Glance.dmg), open it, and drag Glance into Applications.
 4. Launch Glance. Its pull-request count will appear in the menu bar.
+
+Glance currently connects to github.com using the account selected by GitHub CLI for that host. If the wrong account appears, use `gh auth status --hostname github.com` and `gh auth switch --hostname github.com --user YOUR_USERNAME`, then refresh Glance. If authentication has expired, run `gh auth login --hostname github.com` again. Do not paste tokens into Glance or troubleshooting reports.
 
 Glance releases are universal for Apple silicon and Intel Macs, signed with a Developer ID certificate, and notarized by Apple.
 
@@ -84,7 +86,13 @@ Glance asks GitHub CLI for your existing token when it refreshes and does not pe
 ~/Library/Application Support/Glance
 ```
 
-Excluding a repository removes its pull requests from the live queue and local cache and prevents new-review notifications from that repository.
+Excluding a repository removes its pull requests from the live queue and local cache and prevents new notifications from that repository. This filters the active app data; it does not erase recovery copies, external backups, previously delivered notifications, or matching text in saved queries and preferences.
+
+Missing local files are normal on first launch. If existing files are damaged or contain invalid values, Glance preserves a recovery copy beside them when possible and shows a warning. If it cannot preserve the original, it disables writes to that file. Save failures are also shown; do not assume recent changes survived quitting while a save-error warning remains. Recovery copies can contain private PR metadata.
+
+Approved PRs hidden by your filters are omitted from the offline cache unless pinned. After a restart, making those filters less restrictive may require a successful refresh to bring the PRs back. A pin does not override a repository exclusion.
+
+Check icons summarize GitHub's aggregate rollup. Glance does not offer a complete check-detail viewer; open the PR on GitHub for individual logs and the full list. When fetched detail is incomplete, attention text avoids an exact failing-check count.
 
 ## Build from source
 
@@ -107,7 +115,8 @@ Create a standalone application bundle or DMG with:
 
 ```sh
 ./scripts/build-app.sh
-./scripts/build-dmg.sh
+./scripts/build-dmg.sh --use-existing-app
+./scripts/build-pkg.sh --use-existing-app
 ```
 
 Without a Developer ID certificate in your Keychain, local artifacts receive an ad-hoc signature. Maintainer signing, notarization, and tagged-release instructions are documented in [docs/RELEASING.md](docs/RELEASING.md).

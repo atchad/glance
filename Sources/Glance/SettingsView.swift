@@ -459,17 +459,10 @@ private struct RepositoryNotificationPicker: View {
 }
 
 private struct SectionSettingsView: View {
-  private enum ValidationState: Equatable {
-    case idle
-    case validating
-    case valid
-    case invalid(String)
-  }
-
   @ObservedObject var store: AppStore
   @State private var draftName = ""
   @State private var draftQuery = "is:pr is:open "
-  @State private var validationState: ValidationState = .idle
+  @State private var validation = SearchQueryValidation()
 
   var body: some View {
     VStack(spacing: 0) {
@@ -481,10 +474,7 @@ private struct SectionSettingsView: View {
                 TextField("Section name", text: $section.name)
                   .textFieldStyle(.plain)
                   .font(.body)
-                TextField("GitHub search", text: $section.query)
-                  .textFieldStyle(.plain)
-                  .font(.system(.caption, design: .monospaced))
-                  .foregroundStyle(.secondary)
+                SectionQueryEditor(section: $section, store: store)
                 Picker("Sort", selection: $section.sortMode) {
                   ForEach(PRSortMode.allCases) { mode in Text(mode.title).tag(mode) }
                 }
@@ -535,24 +525,23 @@ private struct SectionSettingsView: View {
           TextField("GitHub search", text: $draftQuery)
             .textFieldStyle(.roundedBorder)
             .font(.system(.body, design: .monospaced))
-            .onChange(of: draftQuery) { _, _ in validationState = .idle }
+            .onChange(of: draftQuery) { _, _ in validation.reset() }
           Button {
-            validationState = .validating
+            let query = draftQuery
+            let request = validation.begin()
             Task {
-              if let error = await store.validateSectionQuery(draftQuery) {
-                validationState = .invalid(error)
-              } else {
-                validationState = .valid
-              }
+              let error = await store.validateSectionQuery(query)
+              guard query == draftQuery else { return }
+              validation.finish(request, error: error)
             }
           } label: {
-            if validationState == .validating {
+            if validation.state == .validating {
               ProgressView().controlSize(.small).frame(width: 48)
             } else {
               Text("Validate")
             }
           }
-          .disabled(validationState == .validating)
+          .disabled(validation.state == .validating)
           .help("Validate this search with GitHub")
           Button {
             guard !draftName.trimmingCharacters(in: .whitespaces).isEmpty,
@@ -561,14 +550,14 @@ private struct SectionSettingsView: View {
             store.preferences.sections.append(PRSection(name: draftName, query: draftQuery))
             draftName = ""
             draftQuery = "is:pr is:open "
-            validationState = .idle
+            validation.reset()
             store.refresh()
           } label: {
             Image(systemName: "plus")
           }
           .buttonStyle(.bordered)
           .disabled(
-            validationState != .valid
+            validation.state != .valid
               || draftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
           )
           .help("Add section")
@@ -583,7 +572,7 @@ private struct SectionSettingsView: View {
 
   @ViewBuilder
   private var validationMessage: some View {
-    switch validationState {
+    switch validation.state {
     case .idle:
       Text("Validate a GitHub pull request search before adding it.")
         .font(.caption).foregroundStyle(.secondary)
@@ -605,5 +594,60 @@ private struct SectionSettingsView: View {
     guard store.preferences.sections.indices.contains(destination) else { return }
     store.preferences.sections.swapAt(index, destination)
     store.refresh()
+  }
+}
+
+
+private struct SectionQueryEditor: View {
+  @Binding var section: PRSection
+  @ObservedObject var store: AppStore
+  @State private var query: String
+  @State private var validation = SearchQueryValidation()
+
+  init(section: Binding<PRSection>, store: AppStore) {
+    _section = section
+    self.store = store
+    _query = State(initialValue: section.wrappedValue.query)
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 5) {
+      TextField("GitHub search", text: $query)
+        .textFieldStyle(.plain)
+        .font(.system(.caption, design: .monospaced))
+        .foregroundStyle(.secondary)
+        .onChange(of: query) { _, _ in validation.reset() }
+      if query != section.query {
+        HStack {
+          Button("Save") {
+            let submitted = query
+            let sectionID = section.id
+            let request = validation.begin()
+            Task {
+              let error = await store.validateSectionQuery(submitted)
+              guard query == submitted else { return }
+              if validation.finish(request, error: error) {
+                store.updateSectionQuery(id: sectionID, query: submitted)
+              }
+            }
+          }
+          .disabled(validation.state == .validating)
+          .accessibilityLabel("Save search for \(section.name)")
+          Button("Cancel") {
+            validation.reset()
+            query = section.query
+          }
+          if validation.state == .validating {
+            ProgressView().controlSize(.small)
+          }
+        }
+        .controlSize(.small)
+      }
+      if case .invalid(let message) = validation.state {
+        Label(message, systemImage: "exclamationmark.triangle.fill")
+          .font(.caption).foregroundStyle(.red)
+      }
+    }
+    .onDisappear { validation.reset() }
   }
 }

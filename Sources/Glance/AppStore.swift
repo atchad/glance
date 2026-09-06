@@ -357,6 +357,12 @@ final class AppStore: ObservableObject {
     }
   }
 
+  func updateSectionQuery(id: UUID, query: String) {
+    guard let index = preferences.sections.firstIndex(where: { $0.id == id }) else { return }
+    preferences.sections[index].query = query
+    refresh()
+  }
+
   static func connectionIssue(for error: Error) -> AppConnectionIssue {
     if let githubError = error as? GitHubError {
       switch githubError {

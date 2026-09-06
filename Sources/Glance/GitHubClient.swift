@@ -97,21 +97,28 @@ struct GitHubClient {
   ) {
     let credential = try await session.credential()
     let collected = try await withThrowingTaskGroup(
-      of: (Int, String, [RawPullRequest]).self
+      of: (Int, String, [RawPullRequest], String?).self
     ) { group in
-      var results: [(Int, String, [RawPullRequest])] = []
+      var results: [(Int, String, [RawPullRequest], String?)] = []
       for (index, section) in sections.enumerated() {
         if index >= 4, let result = try await group.next() { results.append(result) }
         try Task.checkCancellation()
         group.addTask {
-          let result = try await fetch(section: section, credential: credential)
-          return (index, result.viewer, result.pullRequests)
+          do {
+            let result = try await fetch(section: section, credential: credential)
+            return (index, result.viewer, result.pullRequests, nil)
+          } catch {
+            if let githubError = error as? GitHubError,
+              case .notAuthenticated = githubError { throw githubError }
+            try Task.checkCancellation()
+            return (index, "", [], error.localizedDescription)
+          }
         }
       }
       for try await result in group { results.append(result) }
       return results.sorted { $0.0 < $1.0 }
     }
-    let viewer = collected.first?.1 ?? ""
+    let viewer = collected.first(where: { !$0.1.isEmpty })?.1 ?? ""
     let teamIDs = Set(collected.flatMap { $0.2 }.flatMap { $0.requestedTeamIDs })
     var memberships: [String: Bool] = [:]
     for teamID in teamIDs.sorted() {
@@ -125,10 +132,10 @@ struct GitHubClient {
         // An inaccessible team is unknown, not evidence that the viewer is a member.
       }
     }
-    return (viewer, collected.map { index, login, requests in
+    return (viewer, collected.map { index, login, requests, error in
       SectionSnapshot(id: sections[index].id, pullRequests: requests.map {
         $0.model(viewer: login, teamMemberships: memberships)
-      })
+      }, errorMessage: error)
     })
   }
 

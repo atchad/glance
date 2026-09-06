@@ -4,6 +4,79 @@ import XCTest
 @testable import Glance
 
 final class PersonalReviewTargetingTests: XCTestCase {
+  @MainActor
+  func testSectionFailureKeepsOtherResultsAndRetainsFailedSectionCache() async throws {
+    let fixtureURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+      .appending(path: "Fixtures/personal-review-section.json")
+    let fixture = try Data(contentsOf: fixtureURL)
+    let recorder = RequestRecorder(fixture: fixture, failureQuery: "broken")
+    FixtureURLProtocol.handler = { try recorder.response(for: $0) }
+    defer { FixtureURLProtocol.handler = nil }
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [FixtureURLProtocol.self]
+    let session = URLSession(configuration: config)
+    defer { session.invalidateAndCancel() }
+    let client = GitHubClient(session: GitHubSession(credentialProvider: FixtureCredentials()),
+      urlSession: session)
+    let sections = [PRSection(name: "Working", query: "is:pr"),
+      PRSection(name: "Broken", query: "broken")]
+    let fetched = try await client.fetchAll(sections: sections)
+    XCTAssertEqual(fetched.viewer, "viewer")
+    XCTAssertFalse(fetched.snapshots[0].pullRequests.isEmpty)
+    XCTAssertNil(fetched.snapshots[0].errorMessage)
+    XCTAssertEqual(fetched.snapshots[1].errorMessage, "Invalid section search")
+
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let fresh = try XCTUnwrap(fetched.snapshots[0].pullRequests.first)
+    var old = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(fresh)) as? [String: Any])
+    old["title"] = "Old cached title"
+    old["headRefOID"] = "old-head"
+    let retained = try JSONDecoder().decode(PullRequest.self,
+      from: JSONSerialization.data(withJSONObject: old))
+    var next = (viewer: "viewer", snapshots: [
+      SectionSnapshot(id: sections[0].id, pullRequests: []),
+      SectionSnapshot(id: sections[1].id, pullRequests: [retained])])
+    let store = AppStore(storageDirectory: directory) { _ in next }
+    store.preferences.sections = sections
+    XCTAssertNil(store.menuBarCount)
+    func refresh() async {
+      store.refresh()
+      for _ in 0..<1000 {
+        if !store.isRefreshing { return }
+        await Task.yield()
+      }
+      XCTFail("Refresh did not finish")
+    }
+    await refresh()
+    store.togglePin(retained)
+    next = fetched
+    await refresh()
+    XCTAssertEqual(store.snapshots[sections[1].id]?.map(\.id), [retained.id])
+    XCTAssertEqual(store.snapshots[sections[1].id]?.first?.title, fresh.title)
+    XCTAssertEqual(store.snapshots[sections[1].id]?.first?.headRefOID, fresh.headRefOID)
+    XCTAssertTrue(store.preferences.pinnedPullRequests.contains(retained.id))
+    XCTAssertEqual(store.sectionErrors[sections[1].id], "Invalid section search")
+    let reload = AppStore(storageDirectory: directory)
+    XCTAssertEqual(reload.sectionErrors[sections[1].id], "Invalid section search")
+    let updated = store.lastUpdated
+    next.snapshots = sections.map {
+      SectionSnapshot(id: $0.id, pullRequests: [], errorMessage: "Still unavailable")
+    }
+    await refresh()
+    XCTAssertEqual(store.lastUpdated, updated)
+    store.preferences.sections[1].query = "is:pr is:closed"
+    XCTAssertNil(store.snapshots[sections[1].id])
+    let editedReload = AppStore(storageDirectory: directory)
+    XCTAssertNil(editedReload.snapshots[sections[1].id])
+    XCTAssertNil(editedReload.menuBarCount)
+    next.snapshots = sections.map { SectionSnapshot(id: $0.id, pullRequests: []) }
+    await refresh()
+    XCTAssertTrue(store.sectionErrors.isEmpty)
+    XCTAssertNil(store.errorMessage)
+  }
+
   func testDecodedCustomSectionsUsePersonalRequestsAndVerifiedTeams() async throws {
     let fixtureURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
       .appending(path: "Fixtures/personal-review-section.json")
@@ -151,9 +224,13 @@ private struct FixtureCredentials: GitHubCredentialProvider {
 private final class RequestRecorder: @unchecked Sendable {
   private let lock = NSLock()
   private let fixture: Data
+  private let failureQuery: String?
   private var calls: [String: Int] = [:]
   var teamCalls: [String: Int] { lock.withLock { calls } }
-  init(fixture: Data) { self.fixture = fixture }
+  init(fixture: Data, failureQuery: String? = nil) {
+    self.fixture = fixture
+    self.failureQuery = failureQuery
+  }
 
   func response(for request: URLRequest) throws -> Data {
     var body = request.httpBody ?? Data()
@@ -169,7 +246,13 @@ private final class RequestRecorder: @unchecked Sendable {
     }
     let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
     let query = try XCTUnwrap(payload["query"] as? String)
-    if query.contains("GlanceSection") { return fixture }
+    if query.contains("GlanceSection") {
+      let variables = payload["variables"] as? [String: Any]
+      if let failureQuery, variables?["query"] as? String == failureQuery {
+        return Data(#"{"errors":[{"message":"Invalid section search"}]}"#.utf8)
+      }
+      return fixture
+    }
     XCTAssertTrue(query.contains("membership: ALL"))
     let variables = try XCTUnwrap(payload["variables"] as? [String: Any])
     XCTAssertEqual(variables["viewer"] as? String, "viewer")

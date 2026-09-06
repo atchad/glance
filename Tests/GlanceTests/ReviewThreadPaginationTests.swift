@@ -5,17 +5,16 @@ import XCTest
 final class ReviewThreadPaginationTests: XCTestCase {
   func testUnresolvedThreadBeyondFirstHundredIsCounted() async throws {
     let result = try await fetch(repeatingCursor: false)
-    XCTAssertEqual(result.first?.unresolvedConversationCount, 1)
+    XCTAssertEqual(result.pullRequests.first?.unresolvedConversationCount, 1)
   }
 
   func testRepeatedCursorFailsInsteadOfLooping() async throws {
-    do {
-      _ = try await fetch(repeatingCursor: true)
-      XCTFail("Repeated cursor must fail")
-    } catch is GitHubError { }
+    let result = try await fetch(repeatingCursor: true)
+    XCTAssertTrue(result.pullRequests.isEmpty)
+    XCTAssertNotNil(result.errorMessage)
   }
 
-  private func fetch(repeatingCursor: Bool) async throws -> [PullRequest] {
+  private func fetch(repeatingCursor: Bool) async throws -> SectionSnapshot {
     let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
       .appending(path: "Fixtures/personal-review-section.json")
     var fixture = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
@@ -56,7 +55,7 @@ final class ReviewThreadPaginationTests: XCTestCase {
     defer { session.invalidateAndCancel() }
     let client = GitHubClient(session: GitHubSession(credentialProvider: ThreadCredentials()), urlSession: session)
     let result = try await client.fetchAll(sections: [PRSection(name: "Test", query: "is:pr")])
-    return result.snapshots.first?.pullRequests ?? []
+    return try XCTUnwrap(result.snapshots.first)
   }
 }
 private struct ThreadCredentials: GitHubCredentialProvider {

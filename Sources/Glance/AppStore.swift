@@ -9,6 +9,7 @@ enum AppConnectionIssue: Equatable {
 
 @MainActor
 final class AppStore: ObservableObject {
+  @Published private(set) var sectionErrors: [UUID: String] = [:]
   @Published private(set) var snapshots: [UUID: [PullRequest]] = [:]
   @Published private(set) var viewerLogin: String?
   @Published private(set) var isRefreshing = false
@@ -44,8 +45,15 @@ final class AppStore: ObservableObject {
       if oldValue.sections.map(\.id) != preferences.sections.map(\.id)
         || zip(oldValue.sections, preferences.sections).contains(where: { $0.query != $1.query })
       {
+        for section in oldValue.sections where !preferences.sections.contains(where: {
+          $0.id == section.id && $0.query == section.query
+        }) {
+          snapshots.removeValue(forKey: section.id)
+          sectionErrors.removeValue(forKey: section.id)
+        }
         refreshGeneration &+= 1
         if isRefreshing { refreshQueued = true }
+        if lastUpdated != nil { saveCache() }
       }
       savePreferences()
       if oldValue.appearanceMode != preferences.appearanceMode {
@@ -110,6 +118,13 @@ final class AppStore: ObservableObject {
         from: cachedSnapshots,
         excluded: preferences.excludedRepositories
       )
+      sectionErrors = Dictionary(cache.snapshots.compactMap { snapshot in
+        snapshot.errorMessage.map { (snapshot.id, $0) }
+      }, uniquingKeysWith: { first, _ in first })
+      if !sectionErrors.isEmpty {
+        errorMessage = "Some sections couldn’t refresh. See details below."
+        connectionIssue = .unavailable
+      }
       viewerLogin = cache.viewerLogin
       lastUpdated = cache.savedAt
       hasNotificationBaseline = true
@@ -123,7 +138,9 @@ final class AppStore: ObservableObject {
   }
 
   var menuBarCount: Int? {
-    Self.calculateMenuBarCount(
+    guard lastUpdated != nil, errorMessage == nil, sectionErrors.isEmpty,
+      preferences.sections.allSatisfy({ snapshots[$0.id] != nil }) else { return nil }
+    return Self.calculateMenuBarCount(
       mode: preferences.menuBarCountMode,
       includeMyPullRequests: preferences.includeMyPullRequestsInMenuBarCount,
       sections: preferences.sections,
@@ -265,8 +282,20 @@ final class AppStore: ObservableObject {
       do {
         let result = try await fetchSnapshots(sections)
         guard generation == refreshGeneration else { return }
-        let fetchedSnapshots = Dictionary(
-          uniqueKeysWithValues: result.snapshots.map { ($0.id, $0.pullRequests) })
+        sectionErrors = Dictionary(uniqueKeysWithValues: result.snapshots.compactMap { snapshot in
+          snapshot.errorMessage.map { (snapshot.id, $0) }
+        })
+        let freshPullRequests = Dictionary(
+          result.snapshots.filter { $0.errorMessage == nil }.flatMap(\.pullRequests).map { ($0.id, $0) },
+          uniquingKeysWith: { first, _ in first })
+        let fetchedSnapshots = Dictionary(uniqueKeysWithValues: result.snapshots.map { snapshot in
+          (snapshot.id, snapshot.errorMessage == nil
+            ? snapshot.pullRequests : snapshots[snapshot.id, default: []].map { freshPullRequests[$0.id] ?? $0 })
+        })
+        if !sectionErrors.isEmpty {
+          errorMessage = "Some sections couldn’t refresh. See details below."
+          connectionIssue = .unavailable
+        }
         let nextSnapshots = Self.removingExcludedRepositories(
           from: fetchedSnapshots,
           excluded: preferences.excludedRepositories
@@ -277,7 +306,9 @@ final class AppStore: ObservableObject {
           ? PRTransition.detect(previous: previousUnique, current: nextUnique,
             enabledEvents: preferences.notificationEvents) : []
         snapshots = nextSnapshots
-        hasNotificationBaseline = true
+        let hasSuccessfulSection = sectionErrors.isEmpty
+          || result.snapshots.contains(where: { $0.errorMessage == nil })
+        if hasSuccessfulSection { hasNotificationBaseline = true }
         let activeIDs = Set(nextSnapshots.values.flatMap { $0.map(\.id) })
         let retainedDismissals = preferences.dismissedRevisions.filter {
           activeIDs.contains($0.key)
@@ -291,8 +322,10 @@ final class AppStore: ObservableObject {
         }
         preferences.pinnedPullRequests.formIntersection(activeIDs)
         if !result.viewer.isEmpty { viewerLogin = result.viewer }
-        lastUpdated = Date()
-        saveCache()
+        if hasSuccessfulSection {
+          lastUpdated = Date()
+        }
+        if lastUpdated != nil { saveCache() }
         sendNotifications(for: transitions)
       } catch is CancellationError {
         return
@@ -545,14 +578,15 @@ final class AppStore: ObservableObject {
   private func saveCache() {
     let cache = GlanceCache(
       savedAt: lastUpdated ?? Date(), viewerLogin: viewerLogin,
-      snapshots: preferences.sections.map {
-        SectionSnapshot(
-          id: $0.id,
-          pullRequests: (snapshots[$0.id] ?? []).filter {
+      snapshots: preferences.sections.compactMap { section in
+        guard let pullRequests = snapshots[section.id] else { return nil }
+        return SectionSnapshot(
+          id: section.id,
+          pullRequests: pullRequests.filter {
             !preferences.excludedRepositories.contains($0.repository)
               && (preferences.pinnedPullRequests.contains($0.id)
                 || !$0.isHiddenAfterApproval(using: preferences))
-          })
+          }, errorMessage: sectionErrors[section.id])
       }
     )
     save(cache, to: cacheURL)

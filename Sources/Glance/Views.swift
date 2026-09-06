@@ -123,6 +123,7 @@ struct DashboardView: View {
       TextField("Search pull requests", text: $searchText)
         .textFieldStyle(.plain)
         .focused($isSearchFocused)
+        .help("Search pull requests (/)")
       if !searchText.isEmpty {
         Button {
           searchText = ""
@@ -167,7 +168,7 @@ struct DashboardView: View {
       }
       .buttonStyle(.borderless)
       .disabled(store.isRefreshing)
-      .help("Refresh now")
+      .help("Refresh now (R)")
       if surface == .menuBar {
         Button {
           togglePanel?()
@@ -609,12 +610,13 @@ private struct PullRequestRow: View {
       }
       Divider()
       Button(isPinned ? "Unpin" : "Pin", action: togglePin)
+        .help("Pin or unpin the selected pull request (P)")
       Menu("Snooze") {
-        Button("For 1 Hour") { snooze(.until(Date().addingTimeInterval(3_600))) }
-        Button("Until Tomorrow") {
+        Button("For one hour") { snooze(.until(Date().addingTimeInterval(3_600))) }
+        Button("Until this time tomorrow") {
           snooze(.until(Calendar.current.date(byAdding: .day, value: 1, to: Date())!))
         }
-        Button("Until Next Week") {
+        Button("For one week") {
           snooze(.until(Calendar.current.date(byAdding: .day, value: 7, to: Date())!))
         }
         Button("Until This Pull Request Changes") {
@@ -649,12 +651,12 @@ private struct PullRequestRow: View {
       StatusLabel(icon: .checksRunning, text: "Checks running", color: .orange, showText: showText)
     case .neutral:
       if showText {
-        Label("No required checks", systemImage: "minus.circle")
+        Label("Checks neutral", systemImage: "minus.circle")
           .font(.caption2).foregroundStyle(.secondary)
-          .help("No required checks")
+          .help("Checks neutral")
       } else {
         Image(systemName: "minus.circle")
-          .help("No required checks").accessibilityLabel("No required checks")
+          .help("Checks neutral").accessibilityLabel("Checks neutral")
       }
     case .unknown: EmptyView()
     }

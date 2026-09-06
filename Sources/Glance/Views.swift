@@ -127,6 +127,7 @@ struct DashboardView: View {
         }
         .buttonStyle(.plain)
         .help("Clear search")
+        .accessibilityLabel("Clear search")
       }
     }
     .padding(.horizontal, 9)
@@ -178,6 +179,7 @@ struct DashboardView: View {
       }
       .buttonStyle(.borderless)
       .help("Settings")
+      .accessibilityLabel("Settings")
     }
     .padding(.horizontal, 14)
     .padding(.vertical, 11)
@@ -237,6 +239,7 @@ struct DashboardView: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
+      .accessibilityValue(section.isCollapsed ? "Collapsed" : "Expanded")
       .help(section.isCollapsed ? "Show \(section.name)" : "Hide \(section.name)")
       .background(.regularMaterial)
     }
@@ -537,6 +540,7 @@ private struct PullRequestRow: View {
     .buttonStyle(.plain)
     .onHover { hovering = $0 }
     .simultaneousGesture(TapGesture().onEnded(select))
+    .accessibilityAddTraits(isSelected ? .isSelected : [])
     .help(Text(verbatim: "Open #\(pullRequest.number) on GitHub"))
     .contextMenu {
       Button("Open on GitHub", action: open)

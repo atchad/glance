@@ -281,7 +281,9 @@ private struct GitHubSettingsPage: View {
             Link("GitHub CLI Setup…", destination: URL(string: "https://cli.github.com/")!)
             Button("Check Connection") { store.refresh() }
           }
+          .accessibilityElement(children: .contain)
         }
+        .accessibilityElement(children: .contain)
       }
       Section {
         LabeledContent {

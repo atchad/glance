@@ -11,6 +11,7 @@
       "nodes": [
         {
           "id": "direct",
+          "stack": { "id": "STACK_DIRECT", "size": 2 },
           "number": 1,
           "title": "direct",
           "url": "https://github.com/example/repo/pull/1",

@@ -40,6 +40,9 @@ final class PersonalReviewTargetingTests: XCTestCase {
     XCTAssertEqual(direct.reviewRequestHistoryComplete, false)
     XCTAssertEqual(direct.checkDetailsComplete, false)
     XCTAssertEqual(direct.checksState, .failure)
+
+    XCTAssertEqual(direct.stackID, "STACK_DIRECT")
+    XCTAssertEqual(direct.stackSize, 2)
     XCTAssertEqual(direct.viewerReviewRequested, true)
     XCTAssertEqual(direct.attention.reason, .reviewRequested)
     XCTAssertEqual(direct.reviewRequestedAt, date(1))

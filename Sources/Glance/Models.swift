@@ -51,6 +51,7 @@ struct PullRequest: Codable, Identifiable, Hashable {
   let hasCurrentApprovalFromOtherReviewer: Bool?
   let stackPosition: Int?
   let stackSize: Int?
+  var stackID: String? = nil
   let viewerDidAuthor: Bool?
   let mergeState: MergeState?
   let unresolvedConversationCount: Int?

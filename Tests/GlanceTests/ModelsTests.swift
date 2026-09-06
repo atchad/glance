@@ -471,6 +471,23 @@ final class ModelsTests: XCTestCase {
     XCTAssertEqual(pr.checksState, .failure)
   }
 
+
+  func testStackSortKeepsUnrelatedStacksTogether() throws {
+    let a1 = makePullRequest(id: "a1", stackPosition: 1, stackID: "stack-a")
+    let a2 = makePullRequest(id: "a2", stackPosition: 2, stackID: "stack-a")
+    let b1 = makePullRequest(id: "b1", stackPosition: 1, stackID: "stack-b")
+    let b2 = makePullRequest(id: "b2", stackPosition: 2, stackID: "stack-b")
+    let plain = makePullRequest(id: "plain")
+    XCTAssertEqual(AppStore.sort([b2, plain, a2, b1, a1], by: .stack).map(\.id),
+      ["a1", "a2", "b1", "b2", "plain"])
+    let data = try JSONEncoder().encode(a1)
+    XCTAssertEqual(try JSONDecoder().decode(PullRequest.self, from: data).stackID, "stack-a")
+    var legacy = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    legacy.removeValue(forKey: "stackID")
+    XCTAssertNil(try JSONDecoder().decode(PullRequest.self,
+      from: JSONSerialization.data(withJSONObject: legacy)).stackID)
+  }
+
   private func makePullRequest(
     id: String = "PR_1",
     repository: String = "owner/repo",
@@ -490,7 +507,9 @@ final class ModelsTests: XCTestCase {
     detailedChecks: [PullRequest.Check]? = nil,
     autoMergeEnabled: Bool? = false,
     mergeQueuePosition: Int? = nil,
-    lifecycleState: PullRequest.LifecycleState? = .open
+    lifecycleState: PullRequest.LifecycleState? = .open,
+    stackPosition: Int? = nil,
+    stackID: String? = nil
   ) -> PullRequest {
     PullRequest(
       id: id, number: 1, repository: repository, title: "Test", author: "author",
@@ -503,7 +522,7 @@ final class ModelsTests: XCTestCase {
       viewerReviewState: viewerReviewState, viewerReviewedHeadOID: viewerReviewedHeadOID,
       viewerReviewSubmittedAt: viewerReviewSubmittedAt,
       hasCurrentApprovalFromOtherReviewer: hasCurrentApprovalFromOtherReviewer,
-      stackPosition: nil, stackSize: nil, viewerDidAuthor: viewerDidAuthor,
+      stackPosition: stackPosition, stackSize: nil, stackID: stackID, viewerDidAuthor: viewerDidAuthor,
       mergeState: mergeState, unresolvedConversationCount: unresolvedConversationCount,
       checks: detailedChecks, autoMergeEnabled: autoMergeEnabled,
       mergeQueuePosition: mergeQueuePosition, lifecycleState: lifecycleState,

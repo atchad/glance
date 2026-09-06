@@ -266,7 +266,7 @@ struct GitHubClient {
               additions deletions reviewDecision viewerDidAuthor mergeable mergeStateStatus
               autoMergeRequest { enabledAt }
               mergeQueueEntry { position }
-              stack { size }
+              stack { id size }
               stackEntry { position }
               author { login avatarUrl }
               repository { nameWithOwner }
@@ -498,7 +498,7 @@ private struct RawPullRequest: Decodable {
   }
   struct AutoMergeRequest: Decodable { let enabledAt: Date }
   struct MergeQueueEntry: Decodable { let position: Int }
-  struct Stack: Decodable { let size: Int }
+  struct Stack: Decodable { let id: String?; let size: Int }
   struct StackEntry: Decodable { let position: Int }
 
   let id: String
@@ -604,7 +604,7 @@ private struct RawPullRequest: Decodable {
       viewerReviewedHeadOID: viewerReview?.commit?.oid,
       viewerReviewSubmittedAt: viewerReview?.submittedAt,
       hasCurrentApprovalFromOtherReviewer: hasCurrentApprovalFromOtherReviewer,
-      stackPosition: stackEntry?.position, stackSize: stack?.size,
+      stackPosition: stackEntry?.position, stackSize: stack?.size, stackID: stack?.id,
       viewerDidAuthor: viewerDidAuthor,
       mergeState: normalizedMergeState,
       unresolvedConversationCount: reviewThreads?.nodes.filter { !$0.isResolved }.count,

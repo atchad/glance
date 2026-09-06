@@ -340,6 +340,14 @@ final class AppStore: ObservableObject {
         let comparison = left.repository.localizedStandardCompare(right.repository)
         if comparison != .orderedSame { return comparison == .orderedAscending }
       case .stack:
+        if left.stackID != right.stackID {
+          if let leftID = left.stackID {
+            guard let rightID = right.stackID else { return true }
+            return leftID < rightID
+          }
+          return false
+        }
+        guard left.stackID != nil else { return left.id < right.id }
         let leftPosition = left.stackPosition ?? Int.max
         let rightPosition = right.stackPosition ?? Int.max
         if leftPosition != rightPosition { return leftPosition < rightPosition }

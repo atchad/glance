@@ -5,6 +5,7 @@ enum GitHubError: LocalizedError {
   case notAuthenticated(String)
   case invalidResponse
   case api(String)
+  case rateLimited(until: Date)
 
   var errorDescription: String? {
     switch self {
@@ -16,6 +17,8 @@ enum GitHubError: LocalizedError {
       "GitHub returned an unreadable response."
     case .api(let message):
       message
+    case .rateLimited(let deadline):
+      "GitHub rate limit reached. Refresh is paused until \(deadline.formatted(date: .omitted, time: .standard))."
     }
   }
 }
@@ -52,7 +55,43 @@ struct GitHubClient {
       throw GitHubError.notAuthenticated(
         "GitHub rejected your sign-in. Run ‘gh auth login --hostname github.com’, then refresh.")
     }
+    if let deadline = Self.rateLimitDeadline(response: http, data: data) {
+      throw GitHubError.rateLimited(until: deadline)
+    }
     return (data, http)
+  }
+
+  static func rateLimitDeadline(response: HTTPURLResponse, data: Data, now: Date = Date()) -> Date? {
+    let retry = response.value(forHTTPHeaderField: "Retry-After")
+    let exhausted = response.value(forHTTPHeaderField: "X-RateLimit-Remaining") == "0"
+    let envelope = try? JSONDecoder().decode(RateLimitEnvelope.self, from: data)
+    let explicitError = envelope?.message?.localizedCaseInsensitiveContains("rate limit") == true
+      || envelope?.errors?.contains {
+        $0.type == "RATE_LIMITED" || $0.message.localizedCaseInsensitiveContains("rate limit")
+      } == true
+    let graphFailure = response.statusCode == 200 && envelope?.errors?.isEmpty == false
+    guard response.statusCode == 429
+      || ((response.statusCode == 403 || graphFailure)
+        && (retry != nil || exhausted || explicitError)) else { return nil }
+
+    func validDate(_ seconds: TimeInterval) -> Date? {
+      guard seconds.isFinite, seconds > now.timeIntervalSince1970,
+        seconds <= Date.distantFuture.timeIntervalSince1970 else { return nil }
+      return Date(timeIntervalSince1970: seconds)
+    }
+    if let retry {
+      if let seconds = TimeInterval(retry), seconds >= 0,
+        let date = validDate(now.timeIntervalSince1970 + seconds) { return date }
+      let formatter = DateFormatter()
+      formatter.locale = Locale(identifier: "en_US_POSIX")
+      formatter.timeZone = TimeZone(secondsFromGMT: 0)
+      formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss z"
+      if let date = formatter.date(from: retry),
+        let valid = validDate(date.timeIntervalSince1970) { return valid }
+    }
+    if exhausted, let reset = response.value(forHTTPHeaderField: "X-RateLimit-Reset"),
+      let seconds = TimeInterval(reset), let date = validDate(seconds) { return date }
+    return now.addingTimeInterval(60)
   }
 
   func fetchAccessibleRepositories() async throws -> [String] {
@@ -108,8 +147,12 @@ struct GitHubClient {
             let result = try await fetch(section: section, credential: credential)
             return (index, result.viewer, result.pullRequests, nil)
           } catch {
-            if let githubError = error as? GitHubError,
-              case .notAuthenticated = githubError { throw githubError }
+            if let githubError = error as? GitHubError {
+              switch githubError {
+              case .notAuthenticated, .rateLimited: throw githubError
+              default: break
+              }
+            }
             try Task.checkCancellation()
             return (index, "", [], error.localizedDescription)
           }
@@ -126,8 +169,12 @@ struct GitHubClient {
         memberships[teamID] = try await isMember(
           of: teamID, viewer: viewer, credential: credential)
       } catch {
-        if let githubError = error as? GitHubError,
-          case .notAuthenticated = githubError { throw githubError }
+        if let githubError = error as? GitHubError {
+          switch githubError {
+          case .notAuthenticated, .rateLimited: throw githubError
+          default: break
+          }
+        }
         try Task.checkCancellation()
         // An inaccessible team is unknown, not evidence that the viewer is a member.
       }
@@ -418,7 +465,11 @@ private struct GraphQLResponse: Decodable {
   let errors: [GraphError]?
 }
 
-private struct GraphError: Decodable { let message: String }
+private struct GraphError: Decodable { let message: String; let type: String? }
+private struct RateLimitEnvelope: Decodable {
+  let message: String?
+  let errors: [GraphError]?
+}
 private struct GraphData: Decodable {
   let viewer: Viewer
   let search: SearchResult

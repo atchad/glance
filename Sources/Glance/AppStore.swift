@@ -15,6 +15,7 @@ final class AppStore: ObservableObject {
   @Published private(set) var isRefreshing = false
   @Published private(set) var lastUpdated: Date?
   @Published var errorMessage: String?
+  @Published private(set) var refreshBlockedUntil: Date?
   @Published private(set) var storageIssues: [String: String] = [:]
   private var blockedStorageURLs: Set<URL> = []
   private var isLoadingStorage = true
@@ -260,6 +261,11 @@ final class AppStore: ObservableObject {
   }
 
   func refresh() {
+    if let deadline = refreshBlockedUntil, deadline > Date() {
+      errorMessage = GitHubError.rateLimited(until: deadline).localizedDescription
+      return
+    }
+    refreshBlockedUntil = nil
     guard !isRefreshing else {
       refreshQueued = true
       return
@@ -330,6 +336,7 @@ final class AppStore: ObservableObject {
       } catch is CancellationError {
         return
       } catch {
+        if case GitHubError.rateLimited(let deadline) = error { refreshBlockedUntil = deadline }
         guard generation == refreshGeneration else { return }
         errorMessage = error.localizedDescription
         connectionIssue = Self.connectionIssue(for: error)
@@ -487,7 +494,7 @@ final class AppStore: ObservableObject {
     if let githubError = error as? GitHubError {
       switch githubError {
       case .ghUnavailable, .notAuthenticated: .authentication
-      case .invalidResponse, .api: .unavailable
+      case .invalidResponse, .api, .rateLimited: .unavailable
       }
     } else {
       .unavailable

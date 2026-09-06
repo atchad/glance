@@ -45,7 +45,7 @@ final class GitHubHTTPAuthenticationTests: XCTestCase {
   }
 
   func testForbiddenResponseIsNotMisclassifiedAsAuthentication() async throws {
-    AuthenticationURLProtocol.handler = { (403, Data("{\"message\":\"Rate limit exceeded\"}".utf8)) }
+    AuthenticationURLProtocol.handler = { (403, Data("{\"message\":\"Resource not accessible\"}".utf8)) }
     defer { AuthenticationURLProtocol.handler = nil }
     let (client, session) = makeClient()
     defer { session.invalidateAndCancel() }
@@ -53,7 +53,24 @@ final class GitHubHTTPAuthenticationTests: XCTestCase {
       _ = try await client.fetchAccessibleRepositories()
       XCTFail("Expected API error")
     } catch let GitHubError.api(message) {
-      XCTAssertEqual(message, "Rate limit exceeded")
+      XCTAssertEqual(message, "Resource not accessible")
+    }
+  }
+
+  func testRateLimitEscapesPerSectionContainment() async throws {
+    for status in [429, 200] {
+      AuthenticationURLProtocol.handler = {
+        (status, Data("{\"errors\":[{\"type\":\"RATE_LIMITED\",\"message\":\"API rate limit exceeded\"}]}".utf8))
+      }
+      defer { AuthenticationURLProtocol.handler = nil }
+      let (client, session) = makeClient()
+      defer { session.invalidateAndCancel() }
+      do {
+        _ = try await client.fetchAll(sections: [PRSection(name: "Test", query: "is:pr")])
+        XCTFail("Rate limits must escape section containment")
+      } catch let GitHubError.rateLimited(deadline) {
+        XCTAssertGreaterThan(deadline.timeIntervalSinceNow, 50)
+      }
     }
   }
 

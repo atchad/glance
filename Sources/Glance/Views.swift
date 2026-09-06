@@ -861,7 +861,8 @@ private struct GitHubUnavailableView: View {
 
   var body: some View {
     ContentUnavailableView {
-      Label("Couldn’t refresh pull requests", systemImage: "icloud.slash")
+      Label(store.refreshBlockedUntil == nil ? "Couldn’t refresh pull requests" : "Refresh paused",
+        systemImage: "icloud.slash")
     } description: {
       Text(store.errorMessage ?? "Try refreshing again.")
         .textSelection(.enabled)

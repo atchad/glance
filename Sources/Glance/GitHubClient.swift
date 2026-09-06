@@ -45,6 +45,16 @@ struct GitHubClient {
     self.urlSession = urlSession
   }
 
+  private func responseData(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+    let (data, response) = try await urlSession.data(for: request)
+    guard let http = response as? HTTPURLResponse else { throw GitHubError.invalidResponse }
+    if http.statusCode == 401 {
+      throw GitHubError.notAuthenticated(
+        "GitHub rejected your sign-in. Run ‘gh auth login --hostname github.com’, then refresh.")
+    }
+    return (data, http)
+  }
+
   func fetchAccessibleRepositories() async throws -> [String] {
     let credential = try await session.credential()
     var page = 1
@@ -63,8 +73,7 @@ struct GitHubClient {
         ],
         credential: credential)
 
-      let (data, response) = try await urlSession.data(for: request)
-      guard let http = response as? HTTPURLResponse else { throw GitHubError.invalidResponse }
+      let (data, http) = try await responseData(for: request)
       guard (200..<300).contains(http.statusCode) else {
         let message =
           (try? JSONDecoder().decode(RESTError.self, from: data).message)
@@ -110,6 +119,8 @@ struct GitHubClient {
         memberships[teamID] = try await isMember(
           of: teamID, viewer: viewer, credential: credential)
       } catch {
+        if let githubError = error as? GitHubError,
+          case .notAuthenticated = githubError { throw githubError }
         try Task.checkCancellation()
         // An inaccessible team is unknown, not evidence that the viewer is a member.
       }
@@ -142,8 +153,8 @@ struct GitHubClient {
         query: query, variables: .init(teamID: teamID, viewer: viewer, cursor: cursor))
       let request = requestFactory.graphQLRequest(
         body: try JSONEncoder().encode(payload), credential: credential)
-      let (data, response) = try await urlSession.data(for: request)
-      guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode)
+      let (data, http) = try await responseData(for: request)
+      guard (200..<300).contains(http.statusCode)
       else { throw GitHubError.invalidResponse }
       let decoded = try JSONDecoder().decode(TeamMembershipResponse.self, from: data)
       guard decoded.errors?.isEmpty != false, let members = decoded.data?.node?.members
@@ -183,8 +194,7 @@ struct GitHubClient {
         URLQueryItem(name: "q", value: trimmed), URLQueryItem(name: "per_page", value: "1"),
       ],
       credential: credential)
-    let (data, response) = try await urlSession.data(for: request)
-    guard let http = response as? HTTPURLResponse else { throw GitHubError.invalidResponse }
+    let (data, http) = try await responseData(for: request)
     guard (200..<300).contains(http.statusCode) else {
       let message =
         (try? JSONDecoder().decode(RESTError.self, from: data).message)
@@ -243,8 +253,8 @@ struct GitHubClient {
     let body = try JSONSerialization.data(withJSONObject: [
       "query": query, "variables": ["id": id, "cursor": cursor]])
     let request = requestFactory.graphQLRequest(body: body, credential: credential)
-    let (data, response) = try await urlSession.data(for: request)
-    guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode)
+    let (data, http) = try await responseData(for: request)
+    guard (200..<300).contains(http.statusCode)
     else { throw GitHubError.invalidResponse }
     let decoded = try JSONDecoder.github.decode(ReviewThreadsResponse.self, from: data)
     if let message = decoded.errors?.first?.message { throw GitHubError.api(message) }
@@ -336,8 +346,7 @@ struct GitHubClient {
     let request = requestFactory.graphQLRequest(
       body: try JSONEncoder().encode(payload), credential: credential)
 
-    let (data, response) = try await urlSession.data(for: request)
-    guard let http = response as? HTTPURLResponse else { throw GitHubError.invalidResponse }
+    let (data, http) = try await responseData(for: request)
     guard (200..<300).contains(http.statusCode) else {
       throw GitHubError.api("GitHub request failed with status \(http.statusCode).")
     }

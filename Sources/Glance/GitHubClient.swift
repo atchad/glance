@@ -205,7 +205,49 @@ struct GitHubClient {
       cursor = page.nextCursor
     } while cursor != nil
 
+    for index in pullRequests.indices {
+      guard var threads = pullRequests[index].reviewThreads else { continue }
+      var seenCursors = Set<String>()
+      while threads.totalCount > threads.nodes.count {
+        guard let pageInfo = threads.pageInfo, pageInfo.hasNextPage,
+          let cursor = pageInfo.endCursor, seenCursors.insert(cursor).inserted
+        else { throw GitHubError.invalidResponse }
+        let page = try await fetchReviewThreads(
+          id: pullRequests[index].id, cursor: cursor, credential: credential)
+        guard !page.nodes.isEmpty else { throw GitHubError.invalidResponse }
+        threads.nodes.append(contentsOf: page.nodes)
+        threads.pageInfo = page.pageInfo
+        threads.totalCount = max(threads.totalCount, page.totalCount)
+      }
+      pullRequests[index].reviewThreads = threads
+    }
     return (viewer, pullRequests)
+  }
+
+  private func fetchReviewThreads(id: String, cursor: String, credential: GitHubCredential)
+    async throws -> RawPullRequest.ReviewThreadConnection
+  {
+    let query = """
+      query GlanceReviewThreads($id: ID!, $cursor: String!) {
+        node(id: $id) {
+          ... on PullRequest {
+            reviewThreads(first: 100, after: $cursor) {
+              totalCount pageInfo { hasNextPage endCursor } nodes { isResolved }
+            }
+          }
+        }
+      }
+      """
+    let body = try JSONSerialization.data(withJSONObject: [
+      "query": query, "variables": ["id": id, "cursor": cursor]])
+    let request = requestFactory.graphQLRequest(body: body, credential: credential)
+    let (data, response) = try await urlSession.data(for: request)
+    guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode)
+    else { throw GitHubError.invalidResponse }
+    let decoded = try JSONDecoder.github.decode(ReviewThreadsResponse.self, from: data)
+    if let message = decoded.errors?.first?.message { throw GitHubError.api(message) }
+    guard let threads = decoded.data?.node?.reviewThreads else { throw GitHubError.invalidResponse }
+    return threads
   }
 
   private func fetchPage(
@@ -247,6 +289,7 @@ struct GitHubClient {
                 }
               }
               reviewThreads(first: 100) {
+                pageInfo { hasNextPage endCursor }
                 totalCount
                 nodes { isResolved }
               }
@@ -441,8 +484,9 @@ private struct RawPullRequest: Decodable {
   }
   struct ReviewThreadConnection: Decodable {
     struct Thread: Decodable { let isResolved: Bool }
-    let totalCount: Int
-    let nodes: [Thread]
+    var totalCount: Int
+    var nodes: [Thread]
+    var pageInfo: SearchResult.PageInfo?
   }
   struct AutoMergeRequest: Decodable { let enabledAt: Date }
   struct MergeQueueEntry: Decodable { let position: Int }
@@ -475,7 +519,7 @@ private struct RawPullRequest: Decodable {
   let labels: LabelConnection
   let reviewRequests: ReviewRequestConnection
   let reviews: ReviewConnection
-  let reviewThreads: ReviewThreadConnection?
+  var reviewThreads: ReviewThreadConnection?
   let timelineItems: ReviewEventConnection
   let commits: CommitConnection
 
@@ -570,4 +614,14 @@ extension JSONDecoder {
     decoder.dateDecodingStrategy = .iso8601
     return decoder
   }
+}
+
+private struct ReviewThreadsResponse: Decodable {
+  struct GraphData: Decodable {
+    struct Node: Decodable { let reviewThreads: RawPullRequest.ReviewThreadConnection? }
+    let node: Node?
+  }
+  struct Failure: Decodable { let message: String }
+  let data: GraphData?
+  let errors: [Failure]?
 }

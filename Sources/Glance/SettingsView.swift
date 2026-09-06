@@ -210,13 +210,13 @@ private struct ReviewSettingsPage: View {
       } footer: {
         Text("Choose which pull requests contribute to the number beside the menu-bar icon.")
       }
-      Section("Completed reviews") {
+      Section {
         Toggle(
-          "Remove pull requests after I approve them",
+          "Hide pull requests after I approve them",
           isOn: $store.preferences.removePullRequestsAfterApproval)
           .help("Hide a pull request after your approval, until it changes or you are asked to review it again.")
         Toggle(
-          "Remove pull requests after another reviewer approves them",
+          "Hide pull requests after another reviewer approves them",
           isOn: $store.preferences.removePullRequestsAfterOtherApproval)
           .help("Hide a pull request after another reviewer approves the current revision.")
         Toggle(
@@ -231,8 +231,12 @@ private struct ReviewSettingsPage: View {
         )
         .disabled(!store.preferences.removePullRequestsAfterApproval)
         .help("Show an approved pull request again when your review is requested again.")
+      } header: {
+        Text("Completed reviews")
+      } footer: {
+        Text("Hidden approved pull requests aren’t saved offline unless pinned. After restarting, changing these settings may require a refresh to show them again.")
       }
-      Section("Row Details") {
+      Section("Row details") {
         Toggle("Author", isOn: $store.preferences.showAuthor)
         Toggle("Time", isOn: $store.preferences.showUpdatedAt)
         if store.preferences.showUpdatedAt {

@@ -426,7 +426,7 @@ enum GlobalShortcut: String, Codable, CaseIterable, Identifiable {
   }
 }
 
-struct Preferences: Codable {
+struct Preferences: Codable, Equatable {
   struct ApprovalCachePolicy: Equatable {
     let removesApproved: Bool
     let removesApprovedByOthers: Bool

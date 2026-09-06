@@ -38,7 +38,9 @@ final class AppStore: ObservableObject {
   @Published private(set) var repositoryLoadError: String?
   @Published var preferences: Preferences {
     didSet {
-      guard !isLoadingStorage else { return }
+      guard !isLoadingStorage,
+        oldValue != preferences || storageIssues["preferences.json-save"] != nil
+      else { return }
       if oldValue.sections.map(\.id) != preferences.sections.map(\.id)
         || zip(oldValue.sections, preferences.sections).contains(where: { $0.query != $1.query })
       {

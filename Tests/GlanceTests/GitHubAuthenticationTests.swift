@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import XCTest
 
@@ -70,6 +71,88 @@ final class GitHubAuthenticationTests: XCTestCase {
     let credential = try await provider.credential()
 
     XCTAssertEqual(credential.accessToken, "github-dot-com-test-token")
+  }
+
+  func testCLIProviderDrainsLargeOutputAndErrorStreams() async throws {
+    let credential = try await runFakeCLI("""
+      /usr/bin/awk 'BEGIN { for (i = 0; i < 200000; i++) printf "x" }'
+      /usr/bin/awk 'BEGIN { for (i = 0; i < 200000; i++) printf "y" }' >&2
+      """)
+    XCTAssertEqual(credential.accessToken, String(repeating: "x", count: 200000))
+  }
+
+  func testCLIProviderRejectsExcessiveOutput() async throws {
+    do {
+      _ = try await runFakeCLI("/usr/bin/awk 'BEGIN { for (i = 0; i < 1100000; i++) printf \"x\" }'")
+      XCTFail("Expected output limit")
+    } catch let GitHubError.api(message) {
+      XCTAssertEqual(message, "GitHub CLI returned too much output.")
+    }
+  }
+
+  func testCLIProviderReportsFailure() async throws {
+    do {
+      _ = try await runFakeCLI("printf 'Sign in first' >&2; exit 1")
+      XCTFail("Expected authentication failure")
+    } catch let GitHubError.notAuthenticated(detail) {
+      XCTAssertEqual(detail, "Sign in first")
+    }
+  }
+
+  func testCLIProviderTimesOut() async throws {
+    let start = Date()
+    let pidFile = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: pidFile) }
+    do {
+      _ = try await runFakeCLI("echo $$ > '\(pidFile.path)'; exec /bin/sleep 30", timeout: 1)
+      XCTFail("Expected timeout")
+    } catch let GitHubError.api(message) {
+      XCTAssertEqual(message, "GitHub CLI timed out. Try refreshing again.")
+    }
+    XCTAssertLessThan(Date().timeIntervalSince(start), 5)
+    try assertProcessExited(pidFile)
+  }
+
+  func testCLIProviderCancelsRunningProcess() async throws {
+    let start = Date()
+    let pidFile = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: pidFile) }
+    let task = Task {
+      try await self.runFakeCLI("echo $$ > '\(pidFile.path)'; exec /bin/sleep 30")
+    }
+    while !FileManager.default.fileExists(atPath: pidFile.path)
+      && Date().timeIntervalSince(start) < 5
+    {
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    task.cancel()
+    do {
+      _ = try await task.value
+      XCTFail("Expected cancellation")
+    } catch is CancellationError {}
+    XCTAssertLessThan(Date().timeIntervalSince(start), 5)
+    try assertProcessExited(pidFile)
+  }
+
+  private func assertProcessExited(_ pidFile: URL) throws {
+    let value = try String(contentsOf: pidFile, encoding: .utf8)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let pid = try XCTUnwrap(Int32(value))
+    XCTAssertEqual(kill(pid, 0), -1)
+    XCTAssertEqual(errno, ESRCH)
+  }
+
+  private func runFakeCLI(_ script: String, timeout: TimeInterval = 30) async throws
+    -> GitHubCredential
+  {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let executable = directory.appendingPathComponent("gh")
+    try ("#!/bin/sh\n" + script).write(to: executable, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
+    return try await GitHubCLICredentialProvider(
+      executableCandidates: [executable.path], timeout: timeout).credential()
   }
 
   func testCLIProviderReportsUnavailableWhenNoCandidateExists() async {

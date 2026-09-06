@@ -19,7 +19,13 @@ trap cleanup EXIT
 if [[ ! -f "$background_path" || ! -f "$repo_root/support/Glance.icns" ]]; then
   "$repo_root/scripts/build-assets.sh"
 fi
-"$repo_root/scripts/build-app.sh" release
+case "${1:-}" in
+  "") "$repo_root/scripts/build-app.sh" release ;;
+  --use-existing-app) ;;
+  *) print -u2 "Usage: $0 [--use-existing-app]"; exit 1 ;;
+esac
+codesign --verify --deep --strict "$app_path"
+lipo "$app_path/Contents/MacOS/Glance" -verify_arch arm64 x86_64
 
 if [[ -e "/Volumes/Glance" ]]; then
   print -u2 "A volume named Glance is already mounted. Eject it and try again."

@@ -103,3 +103,7 @@ https://github.com/atchad/glance/releases/latest/download/Glance.dmg
 ```
 
 Published release assets are available directly from the public repository. The repository must be public before shipping the first Sparkle-enabled release so installed apps can fetch the appcast without GitHub authentication. Each release also includes a signed PKG, signed `appcast.xml`, and `SHA256SUMS.txt` for independent verification.
+
+### Reuse one application for both installers
+
+Build and sign the universal application once with `./scripts/build-app.sh release`, then run `./scripts/build-dmg.sh --use-existing-app` and `./scripts/build-pkg.sh --use-existing-app`. Both packagers verify the existing application's signature and architectures before copying it. The release workflow uses this sequence so the DMG and PKG contain the same app. Running either packager without the flag still builds its own application first.

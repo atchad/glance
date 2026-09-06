@@ -135,8 +135,9 @@ jobs:
 
       - name: Build, sign, notarize, and staple installers
         run: |
-          ./scripts/build-dmg.sh
-          ./scripts/build-pkg.sh
+          ./scripts/build-app.sh release
+          ./scripts/build-dmg.sh --use-existing-app
+          ./scripts/build-pkg.sh --use-existing-app
 
       - name: Generate signed update feed
         env:

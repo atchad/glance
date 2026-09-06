@@ -90,13 +90,15 @@ struct GitHubClient {
     let collected = try await withThrowingTaskGroup(
       of: (Int, String, [RawPullRequest]).self
     ) { group in
+      var results: [(Int, String, [RawPullRequest])] = []
       for (index, section) in sections.enumerated() {
+        if index >= 4, let result = try await group.next() { results.append(result) }
+        try Task.checkCancellation()
         group.addTask {
           let result = try await fetch(section: section, credential: credential)
           return (index, result.viewer, result.pullRequests)
         }
       }
-      var results: [(Int, String, [RawPullRequest])] = []
       for try await result in group { results.append(result) }
       return results.sorted { $0.0 < $1.0 }
     }

@@ -122,7 +122,7 @@ final class AppStore: ObservableObject {
         snapshot.errorMessage.map { (snapshot.id, $0) }
       }, uniquingKeysWith: { first, _ in first })
       if !sectionErrors.isEmpty {
-        errorMessage = "Some sections couldn’t refresh. Their saved results are shown."
+        errorMessage = "Some sections couldn’t refresh. See details below."
         connectionIssue = .unavailable
       }
       viewerLogin = cache.viewerLogin
@@ -293,7 +293,7 @@ final class AppStore: ObservableObject {
             ? snapshot.pullRequests : snapshots[snapshot.id, default: []].map { freshPullRequests[$0.id] ?? $0 })
         })
         if !sectionErrors.isEmpty {
-          errorMessage = "Some sections couldn’t refresh. Their saved results are shown."
+          errorMessage = "Some sections couldn’t refresh. See details below."
           connectionIssue = .unavailable
         }
         let nextSnapshots = Self.removingExcludedRepositories(

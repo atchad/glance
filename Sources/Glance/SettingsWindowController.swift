@@ -55,6 +55,9 @@ final class SettingsWindowController: NSObject, ObservableObject, NSWindowDelega
   private func removeSidebarToggle(from window: NSWindow, attemptsRemaining: Int = 10) {
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self, weak window] in
       guard let self, let window else { return }
+      if let contentView = window.contentView {
+        self.disableSidebarCollapse(in: contentView)
+      }
       if let toolbar = window.toolbar {
         self.observeToolbarIfNeeded(toolbar)
         toolbar.isVisible = true
@@ -70,6 +73,19 @@ final class SettingsWindowController: NSObject, ObservableObject, NSWindowDelega
         self.removeSidebarToggle(from: window, attemptsRemaining: attemptsRemaining - 1)
       }
     }
+  }
+
+  private func disableSidebarCollapse(in view: NSView) {
+    if let splitView = view as? NSSplitView,
+      let controller = splitView.delegate as? NSSplitViewController,
+      let sidebar = controller.splitViewItems.first,
+      sidebar.behavior == .sidebar, sidebar.canCollapse
+    {
+      // A fixed-width sidebar must not advertise dragging it closed.
+      sidebar.canCollapse = false
+      splitView.window?.invalidateCursorRects(for: splitView)
+    }
+    for subview in view.subviews { disableSidebarCollapse(in: subview) }
   }
 
   private func observeToolbarIfNeeded(_ toolbar: NSToolbar) {

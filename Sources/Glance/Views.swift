@@ -257,7 +257,7 @@ struct DashboardView: View {
       ForEach(filtered(store.snoozedPullRequests)) { pullRequest in
         HStack(spacing: 10) {
           VStack(alignment: .leading, spacing: 2) {
-            Text("\(pullRequest.repository) #\(pullRequest.number)")
+            Text("\(pullRequest.repository) #\(String(pullRequest.number))")
               .font(.caption).foregroundStyle(.secondary).lineLimit(1)
             Text(pullRequest.title).font(.callout).lineLimit(1)
           }

@@ -29,6 +29,7 @@ final class AppStore: ObservableObject {
   @Published private(set) var dismissalToUndo: (
     id: String, title: String, revision: String, previousRevision: String?
   )?
+  @Published var shortcutErrorMessage: String?
   @Published private(set) var connectionIssue: AppConnectionIssue?
   @Published private(set) var loginItemErrorMessage: String?
   @Published private(set) var notificationAuthorizationMessage: String?

@@ -236,7 +236,7 @@ struct DashboardView: View {
           Spacer()
           Text("\(items.count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 13).padding(.vertical, 8)
+        .padding(.horizontal, 13).padding(.vertical, 5)
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
@@ -277,7 +277,7 @@ struct DashboardView: View {
         Spacer()
         Text("\(store.snoozedPullRequests.count)").font(.caption.monospacedDigit())
       }
-      .foregroundStyle(.secondary).padding(.horizontal, 13).padding(.vertical, 8)
+      .foregroundStyle(.secondary).padding(.horizontal, 13).padding(.vertical, 5)
       .background(.regularMaterial)
     }
   }

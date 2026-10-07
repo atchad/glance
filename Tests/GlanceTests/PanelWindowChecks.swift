@@ -147,6 +147,30 @@ enum PanelWindowChecks {
       defer { restored.hide() }
       let restoredWindow = NSApp.windows.first { $0.title == "Glance" && $0.isVisible }
       try check(restoredWindow?.frame == resizedFrame, "A new controller must restore the resized frame from disk.")
+
+      restored.hide()
+      panel.show()
+      pump()
+      commands.showRepositoryColors(for: "Owner/Repo")
+      pump()
+      guard let settingsWindow = NSApp.windows.first(where: { $0.title == "Glance Settings" && $0.isVisible }) else {
+        throw Failure(message: "The repository color action must open Settings.")
+      }
+      defer { settingsWindow.orderOut(nil) }
+      try check(!panel.isVisible, "Opening repository colors must hide the originating dashboard.")
+      try check(settings.navigation.category == .repoColors && settings.navigation.repository == "owner/repo",
+        "The color action must select Repo Colors and the requested repository.")
+      try check(store.preferences.repositoryColor(for: "owner/repo") != nil,
+        "A repository deep link must have an assigned color before the editor appears.")
+      commands.showRepositoryColors(for: "Other/Repo")
+      pump()
+      try check(settings.navigation.repository == "other/repo" && settingsWindow.isVisible,
+        "A second repository link must update the existing Settings window.")
+      settings.navigation.category = .keyboard
+      commands.showRepositoryColors(for: "Other/Repo")
+      pump()
+      try check(settings.navigation.category == .repoColors,
+        "A repeated repository link must restore its color settings after visiting Keyboard.")
     }
     return checks
   }

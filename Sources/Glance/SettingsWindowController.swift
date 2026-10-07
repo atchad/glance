@@ -12,6 +12,7 @@ final class SettingsWindowController: NSObject, ObservableObject, NSWindowDelega
   private let keys: KeybindingStore
   private let commands: ApplicationCommands
   private var window: NSWindow?
+  let navigation = SettingsNavigation()
   private weak var observedToolbar: NSToolbar?
 
   init(
@@ -32,6 +33,12 @@ final class SettingsWindowController: NSObject, ObservableObject, NSWindowDelega
     removeSidebarToggle(from: window)
   }
 
+  func showRepositoryColors(for repository: String) {
+    store.assignRepositoryColors(for: [repository])
+    navigation.showRepositoryColors(for: repository)
+    show()
+  }
+
   private func makeWindow() -> NSWindow {
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
@@ -48,7 +55,8 @@ final class SettingsWindowController: NSObject, ObservableObject, NSWindowDelega
     window.isReleasedWhenClosed = false
     window.contentViewController = NSHostingController(
       rootView: GlanceSettingsView(
-        store: store, panel: panelController, updates: updateController, keys: keys, commands: commands)
+        store: store, panel: panelController, updates: updateController, keys: keys, commands: commands,
+        navigation: navigation)
     )
     window.center()
     window.delegate = self

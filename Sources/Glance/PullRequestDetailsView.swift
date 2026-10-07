@@ -6,6 +6,8 @@ struct PullRequestDetailsView: View {
   let pullRequest: PullRequest
   let checksAreCached: Bool
   var copy: (() -> Void)? = nil
+  var repositoryColor: RepositoryColor? = nil
+  var editRepositoryColor: (() -> Void)? = nil
   let close: () -> Void
   @Environment(\.openURL) private var openURL
   @State private var copyFocusRequest = 0
@@ -20,8 +22,12 @@ struct PullRequestDetailsView: View {
       }
       ScrollView {
         VStack(alignment: .leading, spacing: 12) {
-          Text(verbatim: "\(pullRequest.repository) #\(pullRequest.number)")
-            .font(.subheadline).foregroundStyle(.secondary)
+          HStack(alignment: .top, spacing: 4) {
+            RepositoryNameLabel(repository: pullRequest.repository, color: repositoryColor,
+              editColor: editRepositoryColor)
+            Text(verbatim: "#\(pullRequest.number)").foregroundStyle(.secondary).fixedSize()
+          }
+            .font(.subheadline)
             .fixedSize(horizontal: false, vertical: true)
             .textSelection(.enabled)
           Text(verbatim: pullRequest.title)

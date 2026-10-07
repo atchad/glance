@@ -1,7 +1,7 @@
 import SwiftUI
 
-private enum SettingsCategory: String, CaseIterable, Identifiable {
-  case general, reviews, github, sections, keyboard, updates
+enum SettingsCategory: String, CaseIterable, Identifiable {
+  case general, reviews, github, repoColors, sections, keyboard, updates
 
   var id: Self { self }
   var title: String {
@@ -9,6 +9,7 @@ private enum SettingsCategory: String, CaseIterable, Identifiable {
     case .general: "General"
     case .reviews: "Pull requests"
     case .github: "GitHub"
+    case .repoColors: "Repo Colors"
     case .sections: "Sections"
     case .keyboard: "Keyboard"
     case .updates: "Software Update"
@@ -19,6 +20,7 @@ private enum SettingsCategory: String, CaseIterable, Identifiable {
     case .general: "gearshape"
     case .reviews: "arrow.triangle.branch"
     case .github: "chevron.left.forwardslash.chevron.right"
+    case .repoColors: "paintpalette"
     case .sections: "list.bullet.rectangle"
     case .keyboard: "keyboard"
     case .updates: "arrow.triangle.2.circlepath"
@@ -29,10 +31,24 @@ private enum SettingsCategory: String, CaseIterable, Identifiable {
     case .general: Color(nsColor: .systemGray)
     case .reviews: Color(nsColor: .systemIndigo)
     case .github: Color(nsColor: .systemBlue)
+    case .repoColors: Color(nsColor: .systemPink)
     case .sections: Color(nsColor: .systemTeal)
     case .keyboard: Color(nsColor: .systemOrange)
     case .updates: Color(nsColor: .systemGreen)
     }
+  }
+}
+
+@MainActor
+final class SettingsNavigation: ObservableObject {
+  @Published var category: SettingsCategory = .general
+  @Published var repository: String?
+  @Published private(set) var repositoryColorRequest = 0
+
+  func showRepositoryColors(for repository: String) {
+    self.repository = repository.lowercased()
+    category = .repoColors
+    repositoryColorRequest &+= 1
   }
 }
 
@@ -71,12 +87,12 @@ struct GlanceSettingsView: View {
   @ObservedObject var updates: UpdateController
   @ObservedObject var keys: KeybindingStore
   let commands: ApplicationCommands
-  @State private var selection: SettingsCategory = .general
+  @ObservedObject var navigation: SettingsNavigation
   @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
   var body: some View {
     NavigationSplitView(columnVisibility: $columnVisibility) {
-      List(SettingsCategory.allCases, selection: $selection) { category in
+      List(SettingsCategory.allCases, selection: $navigation.category) { category in
         SettingsCategoryLabel(category: category)
           .tag(category)
       }
@@ -92,10 +108,11 @@ struct GlanceSettingsView: View {
   }
 
   @ViewBuilder private var settingsPage: some View {
-    switch selection {
+    switch navigation.category {
     case .general: GeneralSettingsPage(store: store, panel: panel)
     case .reviews: ReviewSettingsPage(store: store)
     case .github: GitHubSettingsPage(store: store, commands: commands)
+    case .repoColors: RepositoryColorsSettingsPage(store: store, navigation: navigation)
     case .sections: SectionSettingsView(store: store)
     case .keyboard: KeyboardSettingsPage(keys: keys)
     case .updates: UpdateSettingsPage(updates: updates, commands: commands)

@@ -72,6 +72,11 @@ Glance starts with sections for pull requests requesting your review and pull re
 
 - Add, rename, reorder, or remove sections backed by validated GitHub pull-request searches. The Add section Examples menu fills editable drafts for assigned PRs, your non-draft PRs, or a repository. Replace the repository template, validate, then add; visibility preferences still apply.
 - Include or exclude repositories with search and bulk selection.
+- Customize repository name colors in Settings → Repo Colors. New repositories cycle through ten
+  distinct presets, and assignments persist across launches and future pull requests. Choose a preset
+  or use the native color picker’s wheel for a custom color. Right-click a repository name and choose
+  Change Repo Color… to jump directly to its settings. Presets adapt to light and dark appearance;
+  custom colors stay exact.
 - Choose which pull requests contribute to the menu-bar count, including whether review requests
   also count pull requests you opened.
 - Sort each section by attention, review-request time, recent activity, repository, or stack order.

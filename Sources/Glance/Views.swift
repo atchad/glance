@@ -191,6 +191,10 @@ struct DashboardView: View {
               preferences: store.preferences,
               keys: keys,
               perform: { perform($0, target: target(for: pullRequest, section: section)) },
+              editRepositoryColor: {
+                detailRowID = nil
+                commands.showRepositoryColors(for: pullRequest.repository)
+              },
               isPinned: store.preferences.pinnedPullRequests.contains(pullRequest.id),
               isSelected: selectedPullRequestID == rowID(section, pullRequest),
               select: { selectedPullRequestID = rowID(section, pullRequest) },
@@ -252,8 +256,14 @@ struct DashboardView: View {
         ForEach(navigation.items(in: DashboardNavigation.snoozedSectionID)) { pullRequest in
           HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
-              Text("\(pullRequest.repository) #\(String(pullRequest.number))")
-                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+              HStack(spacing: 4) {
+                RepositoryNameLabel(repository: pullRequest.repository,
+                  color: store.preferences.repositoryColor(for: pullRequest.repository),
+                  editColor: { commands.showRepositoryColors(for: pullRequest.repository) })
+                  .lineLimit(1)
+                Text(verbatim: "#\(pullRequest.number)").foregroundStyle(.secondary).fixedSize()
+              }
+              .font(.caption)
               Text(pullRequest.title).font(.callout).lineLimit(1)
             }
             Spacer()
@@ -582,6 +592,7 @@ struct PullRequestRow: View {
   let preferences: Preferences
   @ObservedObject var keys: KeybindingStore
   let perform: (GlanceAction) -> Void
+  let editRepositoryColor: () -> Void
   let isPinned: Bool
   let isSelected: Bool
   let select: () -> Void
@@ -607,7 +618,9 @@ struct PullRequestRow: View {
       .padding(.trailing, 5)
       .popover(isPresented: $isShowingDetails, arrowEdge: .trailing) {
         PullRequestDetailsView(pullRequest: pullRequest, checksAreCached: checksAreCached,
-          copy: { perform(.copyTitle) }) {
+          copy: { perform(.copyTitle) },
+          repositoryColor: preferences.repositoryColor(for: pullRequest.repository),
+          editRepositoryColor: editRepositoryColor) {
           isShowingDetails = false
         }
       }
@@ -644,6 +657,7 @@ struct PullRequestRow: View {
       Button("Copy Title") { perform(.copyTitle) }.help(keys.help(for: .copyTitle))
       Button("Copy URL") { perform(.copyURL) }.help(keys.help(for: .copyURL))
       Button("Copy Branch") { perform(.copyBranch) }.help(keys.help(for: .copyBranch))
+      Button("Change Repo Color…", action: editRepositoryColor)
       Divider()
       Button(isPinned ? "Unpin" : "Pin") { perform(.pin) }
         .help(keys.help(for: .pin))
@@ -704,7 +718,9 @@ struct PullRequestRow: View {
 
   private var identity: some View {
     HStack(spacing: 4) {
-      Text(pullRequest.repository).font(.caption.weight(.medium)).lineLimit(1)
+      RepositoryNameLabel(repository: pullRequest.repository,
+        color: preferences.repositoryColor(for: pullRequest.repository), editColor: editRepositoryColor)
+        .font(.caption.weight(.medium)).lineLimit(1)
       Text(verbatim: "#\(pullRequest.number)").font(.caption.monospacedDigit()).fixedSize()
       if let position = pullRequest.stackPosition, let size = pullRequest.stackSize, size > 1 {
         StackBadge(position: position, size: size).fixedSize()

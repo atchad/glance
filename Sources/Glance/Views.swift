@@ -1,17 +1,17 @@
 import AppKit
 import SwiftUI
 
-enum DashboardSurface { case menuBar, panel }
-
 struct DashboardView: View {
   @ObservedObject var store: AppStore
-  var surface: DashboardSurface
-  var togglePanel: (() -> Void)?
-  var openSettings: (() -> Void)?
-  var didOpenPullRequest: (() -> Void)?
+  @ObservedObject var keys: KeybindingStore
+  let commands: ApplicationCommands
+  var close: (() -> Void)?
   @State private var searchText = ""
+  @State private var snoozedIsCollapsed = true
   @State private var detailRowID: DashboardNavigation.RowID?
   @State private var selectedPullRequestID: DashboardNavigation.RowID?
+  @State private var matcher = KeybindingMatcher()
+  @State private var sequenceExpiry: Task<Void, Never>?
   @FocusState private var isSearchFocused: Bool
   @FocusState private var isDashboardFocused: Bool
 
@@ -21,11 +21,12 @@ struct DashboardView: View {
       searchField
       Divider()
       if let message = store.storageErrorMessage { errorBanner(message) }
+      if let message = keys.errorMessage ?? keys.registrationError { errorBanner(message) }
       if store.errorMessage != nil, store.snapshots.isEmpty {
         if store.connectionIssue == .authentication {
-          GitHubSetupView(store: store)
+          GitHubSetupView(store: store, refresh: { perform(.refresh) })
         } else {
-          GitHubUnavailableView(store: store)
+          GitHubUnavailableView(store: store, refresh: { perform(.refresh) })
         }
       } else {
         ScrollViewReader { proxy in
@@ -49,14 +50,15 @@ struct DashboardView: View {
         }
       }
       if let dismissal = store.dismissalToUndo {
-        DismissalUndoBanner(store: store, title: dismissal.title)
+          DismissalUndoBanner(store: store, title: dismissal.title, undo: { perform(.undoDismissal) })
           .padding(.horizontal, 10).padding(.vertical, 6)
       }
       Divider()
+      if !matcher.prefix.isEmpty { sequenceHints }
       footer
     }
     .frame(
-      minWidth: 310, idealWidth: surface == .menuBar ? 390 : 410, minHeight: 320, idealHeight: 590
+      minWidth: 310, idealWidth: 410, minHeight: 320, idealHeight: 590
     )
     .background(.regularMaterial)
     .background {
@@ -67,7 +69,13 @@ struct DashboardView: View {
         .accessibilityHidden(true)
     }
     .onAppear { isDashboardFocused = true }
+    .background(DashboardKeyboardInput(handle: handleKey, cancel: cancelSequence))
+    .onDisappear { cancelSequence() }
+    .onChange(of: keys.resolved.configuration) { _, _ in cancelSequence() }
+    .onChange(of: isSearchFocused) { _, _ in cancelSequence() }
+    .onChange(of: detailRowID) { _, _ in cancelSequence() }
     .onChange(of: navigation.rows.map(\.id)) { _, _ in
+      cancelSequence()
       let reconciledSelection = navigation.reconciled(selectedPullRequestID)
       let lostFocusedRow = reconciledSelection != selectedPullRequestID
         || navigation.reconciled(detailRowID) != detailRowID
@@ -82,59 +90,10 @@ struct DashboardView: View {
         }
       }
     }
-    .onKeyPress(.downArrow) {
-      guard !isSearchFocused, detailRowID == nil else { return .ignored }
-      moveSelection(by: 1)
-      return .handled
-    }
-    .onKeyPress(.upArrow) {
-      guard !isSearchFocused, detailRowID == nil else { return .ignored }
-      moveSelection(by: -1)
-      return .handled
-    }
-    .onKeyPress("j") {
-      guard !isSearchFocused, detailRowID == nil else { return .ignored }
-      moveSelection(by: 1)
-      return .handled
-    }
-    .onKeyPress("k") {
-      guard !isSearchFocused, detailRowID == nil else { return .ignored }
-      moveSelection(by: -1)
-      return .handled
-    }
-    .onKeyPress("/") {
-      guard !isSearchFocused, detailRowID == nil else { return .ignored }
-      isSearchFocused = true
-      return .handled
-    }
-    .onKeyPress(.return) {
-      guard !isSearchFocused, detailRowID == nil else { return .ignored }
-      return performSelected { openPullRequest($0) }
-    }
-    .onKeyPress("i") {
-      guard !isSearchFocused, detailRowID == nil, let selectedPullRequestID else { return .ignored }
-      detailRowID = selectedPullRequestID
-      return .handled
-    }
-    .onKeyPress("d") {
-      guard !isSearchFocused, detailRowID == nil else { return .ignored }
-      return performSelected { store.dismiss($0) }
-    }
-    .onKeyPress("p") {
-      guard !isSearchFocused, detailRowID == nil else { return .ignored }
-      return performSelected { store.togglePin($0) }
-    }
-    .onKeyPress("r") {
-      guard !isSearchFocused, detailRowID == nil else { return .ignored }
-      store.refresh()
-      return .handled
-    }
     .overlay(alignment: .bottomTrailing) {
-      if case .panel = surface {
-        ResizeGrip()
-          .padding(5)
-          .allowsHitTesting(false)
-      }
+      ResizeGrip()
+        .padding(5)
+        .allowsHitTesting(false)
     }
     .task { store.start() }
   }
@@ -146,16 +105,16 @@ struct DashboardView: View {
       TextField("Search pull requests", text: $searchText)
         .textFieldStyle(.plain)
         .focused($isSearchFocused)
-        .help("Search pull requests (/)")
+        .help(keys.help(for: .search))
       if !searchText.isEmpty {
         Button {
-          searchText = ""
+          perform(.clearSearch)
         } label: {
           Image(systemName: "xmark.circle.fill")
             .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
-        .help("Clear search")
+        .help(keys.help(for: .clearSearch))
         .accessibilityLabel("Clear search")
       }
     }
@@ -178,7 +137,7 @@ struct DashboardView: View {
       }
       Spacer()
       Button {
-        store.refresh()
+        perform(.refresh)
       } label: {
         if store.isRefreshing {
           ProgressView()
@@ -191,23 +150,14 @@ struct DashboardView: View {
       }
       .buttonStyle(.borderless)
       .disabled(store.isRefreshing)
-      .nativeHelp("Refresh now (R)")
-      if surface == .menuBar {
-        Button {
-          togglePanel?()
-        } label: {
-          Image(systemName: "macwindow.on.rectangle")
-        }
-        .buttonStyle(.borderless)
-        .help("Show floating panel")
-      }
+      .nativeHelp(keys.help(for: .refresh))
       Button {
-        openSettings?()
+        perform(.settings)
       } label: {
         Image(systemName: "gearshape")
       }
       .buttonStyle(.borderless)
-      .nativeHelp("Settings")
+      .nativeHelp(keys.help(for: .settings))
       .accessibilityLabel("Settings")
     }
     .padding(.horizontal, 14)
@@ -239,17 +189,11 @@ struct DashboardView: View {
             PullRequestRow(
               pullRequest: pullRequest,
               preferences: store.preferences,
-              open: {
-                store.open(pullRequest)
-                didOpenPullRequest?()
-              },
-              dismiss: { store.dismiss(pullRequest) },
-              togglePin: { store.togglePin(pullRequest) },
-              snooze: { store.snooze(pullRequest, condition: $0) },
+              keys: keys,
+              perform: { perform($0, target: target(for: pullRequest, section: section)) },
               isPinned: store.preferences.pinnedPullRequests.contains(pullRequest.id),
               isSelected: selectedPullRequestID == rowID(section, pullRequest),
               select: { selectedPullRequestID = rowID(section, pullRequest) },
-              navigate: moveSelection,
               isShowingDetails: Binding(
                 get: { detailRowID == rowID(section, pullRequest) },
                 set: { detailRowID = $0 ? rowID(section, pullRequest) : nil }),
@@ -270,7 +214,7 @@ struct DashboardView: View {
       }
     } header: {
       Button {
-        store.toggleCollapse(section)
+        perform(.toggleSection, target: CommandTarget(section: section))
       } label: {
         HStack(spacing: 7) {
           Image(systemName: section.isCollapsed ? "chevron.right" : "chevron.down")
@@ -294,7 +238,8 @@ struct DashboardView: View {
   private var navigation: DashboardNavigation {
     DashboardNavigation(
       sections: store.preferences.sections.map { ($0, store.pullRequests(in: $0)) },
-      query: searchText)
+      query: searchText, snoozed: store.snoozedPullRequests,
+      snoozedIsCollapsed: snoozedIsCollapsed)
   }
 
   private func rowID(_ section: PRSection, _ pullRequest: PullRequest) -> DashboardNavigation.RowID {
@@ -303,50 +248,132 @@ struct DashboardView: View {
 
   private var snoozedSection: some View {
     Section {
-      ForEach(filtered(store.snoozedPullRequests)) { pullRequest in
-        HStack(spacing: 10) {
-          VStack(alignment: .leading, spacing: 2) {
-            Text("\(pullRequest.repository) #\(String(pullRequest.number))")
-              .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-            Text(pullRequest.title).font(.callout).lineLimit(1)
+      if !snoozedIsCollapsed {
+        ForEach(navigation.items(in: DashboardNavigation.snoozedSectionID)) { pullRequest in
+          HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+              Text("\(pullRequest.repository) #\(String(pullRequest.number))")
+                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+              Text(pullRequest.title).font(.callout).lineLimit(1)
+            }
+            Spacer()
+            Button("Wake") { perform(.wake, target: CommandTarget(pullRequest: pullRequest)) }
+              .buttonStyle(.borderless).help(keys.help(for: .wake))
           }
-          Spacer()
-          Button("Wake") { store.unsnooze(pullRequest) }.buttonStyle(.borderless)
+          .contentShape(Rectangle())
+          .onTapGesture {
+            selectedPullRequestID = .init(sectionID: DashboardNavigation.snoozedSectionID, pullRequestID: pullRequest.id)
+            isDashboardFocused = true
+          }
+          .background(selectedPullRequestID?.sectionID == DashboardNavigation.snoozedSectionID
+            && selectedPullRequestID?.pullRequestID == pullRequest.id ? Color.accentColor.opacity(0.16) : .clear)
+          .id(DashboardNavigation.RowID(sectionID: DashboardNavigation.snoozedSectionID, pullRequestID: pullRequest.id))
+          .accessibilityAddTraits(selectedPullRequestID?.pullRequestID == pullRequest.id ? .isSelected : [])
+          .padding(.horizontal, 13).padding(.vertical, 8)
         }
-        .padding(.horizontal, 13).padding(.vertical, 8)
       }
     } header: {
-      HStack {
-        Image(systemName: "clock")
-        Text("Snoozed").font(.subheadline.weight(.medium))
-        Spacer()
-        Text("\(store.snoozedPullRequests.count)").font(.caption.monospacedDigit())
+      Button {
+        snoozedIsCollapsed.toggle()
+      } label: {
+        HStack(spacing: 7) {
+          Image(systemName: snoozedIsCollapsed ? "chevron.right" : "chevron.down")
+            .font(.caption2.weight(.bold))
+          Image(systemName: "clock")
+          Text("Snoozed").font(.subheadline.weight(.medium))
+          Spacer()
+          Text("\(store.snoozedPullRequests.count)").font(.caption.monospacedDigit())
+        }
+        .foregroundStyle(.secondary).padding(.horizontal, 13).padding(.vertical, 5)
+        .contentShape(Rectangle())
       }
-      .foregroundStyle(.secondary).padding(.horizontal, 13).padding(.vertical, 5)
+      .buttonStyle(.plain)
+      .accessibilityValue(snoozedIsCollapsed ? "Collapsed" : "Expanded")
+      .help(snoozedIsCollapsed ? "Show Snoozed" : "Hide Snoozed")
       .background(.regularMaterial)
     }
   }
 
-  private func filtered(_ pullRequests: [PullRequest]) -> [PullRequest] {
-    DashboardNavigation.filtered(pullRequests, query: searchText)
+  private func navigate(_ action: GlanceAction) {
+    // AppKit details buttons can own first responder while SwiftUI still reports dashboard focus.
+    // Force a focus transition so Return acts on the newly selected row, not the old trigger.
+    isDashboardFocused = false
+    DispatchQueue.main.async { isDashboardFocused = true }
+    switch action {
+    case .firstPR: selectedPullRequestID = navigation.rows.first?.id
+    case .lastPR: selectedPullRequestID = navigation.rows.last?.id
+    default: selectedPullRequestID = navigation.moved(from: selectedPullRequestID, by: action == .nextPR ? 1 : -1)
+    }
   }
 
-  private func moveSelection(by offset: Int) {
-    isDashboardFocused = true
-    selectedPullRequestID = navigation.moved(from: selectedPullRequestID, by: offset)
+  private var selectedTarget: CommandTarget {
+    let pr = navigation.pullRequest(for: selectedPullRequestID)
+    let section = store.preferences.sections.first { $0.id == selectedPullRequestID?.sectionID }
+    return target(for: pr, section: section)
   }
 
-  private func performSelected(_ action: (PullRequest) -> Void) -> KeyPress.Result {
-    guard let pullRequest = navigation.pullRequest(for: selectedPullRequestID)
-    else { return .ignored }
-    if !isSearchFocused { isDashboardFocused = true }
-    action(pullRequest)
-    return .handled
+  private func target(for pr: PullRequest?, section: PRSection?) -> CommandTarget {
+    CommandTarget(
+      pullRequest: pr, section: section,
+      navigate: navigation.rows.isEmpty ? nil : navigate,
+      focusSearch: { isSearchFocused = true },
+      clearSearch: searchText.isEmpty ? nil : { searchText = "" },
+      showDetails: pr == nil || section == nil ? nil : {
+        if let pr, let section { detailRowID = rowID(section, pr) }
+      },
+      close: close)
   }
 
-  private func openPullRequest(_ pullRequest: PullRequest) {
-    store.open(pullRequest)
-    didOpenPullRequest?()
+  private func perform(_ action: GlanceAction, target: CommandTarget? = nil) {
+    _ = commands.perform(action, target: target ?? selectedTarget)
+  }
+
+  private func handleKey(_ chord: KeyChord, textEditing: Bool, nativeControl: Bool, isRepeat: Bool) -> Bool {
+    if detailRowID != nil || (nativeControl && chord.modifiers.isEmpty
+      && ["return", "space", "up", "down", "left", "right"].contains(chord.key)) {
+      cancelSequence()
+      return false
+    }
+    let target = selectedTarget
+    let result = matcher.handle(chord, at: ProcessInfo.processInfo.systemUptime,
+      bindings: keys.resolved, textEditing: textEditing || isSearchFocused, isRepeat: isRepeat,
+      enabled: { commands.canPerform($0, target: target) })
+    sequenceExpiry?.cancel()
+    if let deadline = matcher.deadline {
+      sequenceExpiry = Task { @MainActor in
+        let delay = max(0, deadline - ProcessInfo.processInfo.systemUptime)
+        try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+        guard !Task.isCancelled else { return }
+        cancelSequence()
+      }
+    }
+    switch result {
+    case .ignored: return false
+    case .consumed: return true
+    case .action(let action): return commands.perform(action, target: target)
+    }
+  }
+
+  private func cancelSequence() {
+    sequenceExpiry?.cancel()
+    sequenceExpiry = nil
+    matcher.reset()
+  }
+
+  private var sequenceHints: some View {
+    VStack(alignment: .leading, spacing: 4) {
+      Text(matcher.prefix.map(\.display).joined(separator: " → ") + " — Esc to cancel")
+        .font(.caption.weight(.semibold))
+      ForEach(matcher.continuations(in: keys.resolved, enabled: { commands.canPerform($0, target: selectedTarget) }), id: \.0.text) { sequence, action in
+        HStack {
+          Text(sequence.chords.dropFirst(matcher.prefix.count).map(\.display).joined(separator: " → "))
+            .font(.caption.monospaced())
+          Text(action.title).font(.caption)
+        }
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(10).background(.bar)
   }
 
   private func errorBanner(_ message: String) -> some View {
@@ -380,6 +407,7 @@ struct DashboardView: View {
 private struct DismissalUndoBanner: View {
   @ObservedObject var store: AppStore
   let title: String
+  let undo: () -> Void
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var isHovered = false
   @State private var pauseID = UUID()
@@ -396,7 +424,7 @@ private struct DismissalUndoBanner: View {
         .lineLimit(1)
         .help(title)
       Spacer(minLength: 0)
-      Button("Undo", action: store.undoDismissal)
+      Button("Undo", action: undo)
         .buttonStyle(.bordered)
         .controlSize(.small)
         .focused($isFocused)
@@ -552,14 +580,11 @@ struct PullRequestRow: View {
 
   let pullRequest: PullRequest
   let preferences: Preferences
-  let open: () -> Void
-  let dismiss: () -> Void
-  let togglePin: () -> Void
-  let snooze: (SnoozeCondition) -> Void
+  @ObservedObject var keys: KeybindingStore
+  let perform: (GlanceAction) -> Void
   let isPinned: Bool
   let isSelected: Bool
   let select: () -> Void
-  let navigate: (Int) -> Void
   @Binding var isShowingDetails: Bool
   let checksAreCached: Bool
   @State private var detailFocusRequest = 0
@@ -571,17 +596,18 @@ struct PullRequestRow: View {
       DetailActionButton(
         label: "Details for \(pullRequest.repository) #\(pullRequest.number)",
         focusRequest: detailFocusRequest,
-        navigate: navigate
+        help: keys.help(for: .details)
       ) {
         select()
-        isShowingDetails = true
+        perform(.details)
       }
       .frame(width: 28, height: Self.detailButtonHeight)
       // Centered on the summary line.
       .padding(.top, Self.verticalInset + (Self.summaryLineHeight - Self.detailButtonHeight) / 2)
       .padding(.trailing, 5)
       .popover(isPresented: $isShowingDetails, arrowEdge: .trailing) {
-        PullRequestDetailsView(pullRequest: pullRequest, checksAreCached: checksAreCached) {
+        PullRequestDetailsView(pullRequest: pullRequest, checksAreCached: checksAreCached,
+          copy: { perform(.copyTitle) }) {
           isShowingDetails = false
         }
       }
@@ -614,32 +640,21 @@ struct PullRequestRow: View {
     .accessibilityHint(Text(verbatim: "Open #\(pullRequest.number) on GitHub"))
     // A row-wide .help overrides every nested icon's caption in SwiftUI.
     .contextMenu {
-      Button("Open on GitHub", action: open)
-      Button("Copy URL") {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(pullRequest.url.absoluteString, forType: .string)
-      }
-      Button("Copy Branch") {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(pullRequest.branch, forType: .string)
-      }
+      Button("Open on GitHub") { perform(.openPR) }.help(keys.help(for: .openPR))
+      Button("Copy Title") { perform(.copyTitle) }.help(keys.help(for: .copyTitle))
+      Button("Copy URL") { perform(.copyURL) }.help(keys.help(for: .copyURL))
+      Button("Copy Branch") { perform(.copyBranch) }.help(keys.help(for: .copyBranch))
       Divider()
-      Button(isPinned ? "Unpin" : "Pin", action: togglePin)
-        .help("Pin or unpin the selected pull request (P)")
+      Button(isPinned ? "Unpin" : "Pin") { perform(.pin) }
+        .help(keys.help(for: .pin))
       Menu("Snooze") {
-        Button("For one hour") { snooze(.until(Date().addingTimeInterval(3_600))) }
-        Button("Until this time tomorrow") {
-          snooze(.until(Calendar.current.date(byAdding: .day, value: 1, to: Date())!))
-        }
-        Button("For one week") {
-          snooze(.until(Calendar.current.date(byAdding: .day, value: 7, to: Date())!))
-        }
-        Button("Until This Pull Request Changes") {
-          snooze(.revisionChanges(pullRequest.revisionKey))
-        }
+        Button("For one hour") { perform(.snoozeHour) }.help(keys.help(for: .snoozeHour))
+        Button("Until this time tomorrow") { perform(.snoozeTomorrow) }.help(keys.help(for: .snoozeTomorrow))
+        Button("For one week") { perform(.snoozeWeek) }.help(keys.help(for: .snoozeWeek))
+        Button("Until This Pull Request Changes") { perform(.snoozeChanges) }.help(keys.help(for: .snoozeChanges))
         if pullRequest.checksState == .pending {
           Button("Until Checks Finish") {
-            snooze(.checksComplete(pullRequest.revisionKey))
+            perform(.snoozeChecks)
           }
         }
       }
@@ -650,9 +665,9 @@ struct PullRequestRow: View {
     if preferences.commandClickDismisses,
       NSApp.currentEvent?.modifierFlags.contains(.command) == true
     {
-      dismiss()
+      perform(.dismiss)
     } else {
-      open()
+      perform(.openPR)
     }
   }
 
@@ -893,6 +908,7 @@ private struct AvatarView: View {
 
 private struct GitHubSetupView: View {
   @ObservedObject var store: AppStore
+  let refresh: () -> Void
 
   var body: some View {
     ContentUnavailableView {
@@ -904,7 +920,7 @@ private struct GitHubSetupView: View {
     } actions: {
       HStack {
         Link("Get GitHub CLI", destination: URL(string: "https://cli.github.com/")!)
-        Button("Try Again") { store.refresh() }
+        Button("Try Again", action: refresh)
           .help("Check your GitHub connection")
       }
     }
@@ -915,6 +931,7 @@ private struct GitHubSetupView: View {
 
 private struct GitHubUnavailableView: View {
   @ObservedObject var store: AppStore
+  let refresh: () -> Void
 
   var body: some View {
     ContentUnavailableView {
@@ -924,7 +941,7 @@ private struct GitHubUnavailableView: View {
       Text(store.errorMessage ?? "Try refreshing again.")
         .textSelection(.enabled)
     } actions: {
-      Button("Try Again") { store.refresh() }
+      Button("Try Again", action: refresh)
         .help("Retry GitHub now")
     }
     .padding()

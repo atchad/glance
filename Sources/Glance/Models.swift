@@ -422,19 +422,6 @@ struct PRSnooze: Codable, Hashable {
   }
 }
 
-enum GlobalShortcut: String, Codable, CaseIterable, Identifiable {
-  case none, optionSpace, controlSpace, optionG
-  var id: String { rawValue }
-  var title: String {
-    switch self {
-    case .none: "Off"
-    case .optionSpace: "Option–Space"
-    case .controlSpace: "Control–Space"
-    case .optionG: "Option–G"
-    }
-  }
-}
-
 struct Preferences: Codable, Equatable {
   struct ApprovalCachePolicy: Equatable {
     let removesApproved: Bool
@@ -477,6 +464,7 @@ struct Preferences: Codable, Equatable {
   var dismissedRevisions: [String: String] = [:]
   var snoozes: [String: PRSnooze] = [:]
   var pinnedPullRequests: Set<String> = []
+  // Migration input only. Active keybindings live in keybindings.json.
   var globalShortcut: GlobalShortcut = .none
 
   static let `default` = Preferences()

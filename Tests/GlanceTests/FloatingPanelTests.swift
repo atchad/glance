@@ -4,6 +4,11 @@ import XCTest
 @testable import Glance
 
 final class FloatingPanelTests: XCTestCase {
+  func testGlobalHotkeyFocusesVisibleBackgroundPanelBeforeHidingIt() {
+    XCTAssertFalse(FloatingPanelController.shouldHideFromHotkey(isVisible: false, isKey: false))
+    XCTAssertFalse(FloatingPanelController.shouldHideFromHotkey(isVisible: true, isKey: false))
+    XCTAssertTrue(FloatingPanelController.shouldHideFromHotkey(isVisible: true, isKey: true))
+  }
   @MainActor
   func testTitlebarPreferenceDispatchesNativeActions() {
     let panel = ActionPanel()

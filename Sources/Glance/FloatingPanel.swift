@@ -4,36 +4,69 @@ import SwiftUI
 @MainActor
 final class FloatingPanelController: NSObject, ObservableObject, NSWindowDelegate {
   private let store: AppStore
+  private let keys: KeybindingStore
+  private let commands: ApplicationCommands
+  private let defaults: UserDefaults
   private var panel: NSPanel?
-  private var openSettingsAction: () -> Void = {}
   private var titleBarMonitor: Any?
+  private var focusObservers: [NSObjectProtocol] = []
   private var frameBeforeFill: NSRect?
 
   deinit {
     if let titleBarMonitor { NSEvent.removeMonitor(titleBarMonitor) }
+    focusObservers.forEach(NotificationCenter.default.removeObserver)
   }
-  init(store: AppStore) { self.store = store }
-
-  func setOpenSettingsAction(_ action: @escaping () -> Void) {
-    openSettingsAction = action
+  init(store: AppStore, keys: KeybindingStore, commands: ApplicationCommands, defaults: UserDefaults = .standard) {
+    self.store = store
+    self.keys = keys
+    self.commands = commands
+    self.defaults = defaults
+    super.init()
+    let center = NotificationCenter.default
+    focusObservers.append(center.addObserver(forName: NSApplication.didResignActiveNotification,
+      object: NSApp, queue: .main) { [weak self] _ in
+        MainActor.assumeIsolated { self?.hide() }
+      })
+    focusObservers.append(center.addObserver(forName: NSWindow.didBecomeKeyNotification,
+      object: nil, queue: .main) { [weak self] notification in
+        MainActor.assumeIsolated {
+          guard let window = notification.object as? NSWindow else { return }
+          self?.hideIfFocusOutside(window)
+        }
+      })
   }
 
   var isVisible: Bool { panel?.isVisible == true && panel?.isMiniaturized == false }
 
-  func toggle() { isVisible ? hide() : show() }
+  func toggleFromHotkey() {
+    Self.shouldHideFromHotkey(isVisible: isVisible, isKey: panel?.isKeyWindow == true) ? hide() : show()
+  }
+
+  nonisolated static func shouldHideFromHotkey(isVisible: Bool, isKey: Bool) -> Bool { isVisible && isKey }
 
   func show() {
     let panel = panel ?? makePanel()
     applyLevel()
     if panel.isMiniaturized { panel.deminiaturize(nil) }
-    panel.orderFrontRegardless()
     NSApp.activate(ignoringOtherApps: true)
+    panel.makeKeyAndOrderFront(nil)
     objectWillChange.send()
   }
 
   func hide() {
     panel?.orderOut(nil)
     objectWillChange.send()
+  }
+
+  private func hideIfFocusOutside(_ window: NSWindow) {
+    guard isVisible else { return }
+    // Details popovers and sheets belong to the dashboard, not an outside click.
+    var ancestor: NSWindow? = window
+    while let current = ancestor {
+      if current === panel { return }
+      ancestor = current.sheetParent ?? current.parent
+    }
+    hide()
   }
 
   func applyLevel() {
@@ -59,6 +92,7 @@ final class FloatingPanelController: NSObject, ObservableObject, NSWindowDelegat
     panel.titleVisibility = .hidden
     panel.titlebarAppearsTransparent = true
     panel.isFloatingPanel = true
+    // Explicitly order out on deactivation so reactivating the app cannot reopen it.
     panel.hidesOnDeactivate = false
     panel.isReleasedWhenClosed = false
     panel.isMovableByWindowBackground = true
@@ -68,7 +102,8 @@ final class FloatingPanelController: NSObject, ObservableObject, NSWindowDelegat
     panel.standardWindowButton(.zoomButton)?.isEnabled = true
     panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     panel.contentViewController = NSHostingController(
-      rootView: DashboardView(store: store, surface: .panel, openSettings: openSettingsAction)
+      rootView: DashboardView(store: store, keys: keys, commands: commands,
+        close: { [weak self] in self?.hide() })
     )
     // Hosting attachment can resize the window to the view's minimum. Apply geometry
     // afterwards, keeping persisted outer frames distinct from the default content size.
@@ -95,7 +130,7 @@ final class FloatingPanelController: NSObject, ObservableObject, NSWindowDelegat
   private func saveFrame() {
     guard let panel else { return }
     guard frameBeforeFill == nil else { return }
-    UserDefaults.standard.set(NSStringFromRect(panel.frame), forKey: "floatingPanelFrame")
+    defaults.set(NSStringFromRect(panel.frame), forKey: "floatingPanelFrame")
   }
 
   private func installTitleBarMonitor(for panel: NSPanel) {
@@ -136,7 +171,7 @@ final class FloatingPanelController: NSObject, ObservableObject, NSWindowDelegat
   }
 
   private func restoredFrame() -> NSRect? {
-    guard let value = UserDefaults.standard.string(forKey: "floatingPanelFrame") else { return nil }
+    guard let value = defaults.string(forKey: "floatingPanelFrame") else { return nil }
     let frame = NSRectFromString(value)
     guard frame.width >= 310, frame.height >= 320 else { return nil }
     return NSScreen.screens.contains(where: { $0.visibleFrame.intersects(frame) }) ? frame : nil

@@ -6,7 +6,7 @@ struct DetailActionButton: NSViewRepresentable {
   let label: String
   var title: String? = nil
   let focusRequest: Int
-  var navigate: ((Int) -> Void)? = nil
+  var help: String? = nil
   let action: () -> Void
 
   func makeNSView(context: Context) -> Trigger {
@@ -25,9 +25,8 @@ struct DetailActionButton: NSViewRepresentable {
 
   func updateNSView(_ button: Trigger, context: Context) {
     button.performAction = action
-    button.navigate = navigate
     button.setAccessibilityLabel(label)
-    button.toolTip = title == nil ? "Read full title and fetched checks (I)" : nil
+    button.toolTip = help
     if button.focusRequest != focusRequest {
       button.focusRequest = focusRequest
       // Popover dismissal returns key status to the containing window asynchronously.
@@ -40,7 +39,6 @@ struct DetailActionButton: NSViewRepresentable {
 
   final class Trigger: NSButton {
     var performAction: (() -> Void)?
-    var navigate: ((Int) -> Void)?
     var focusRequest = 0
     override var acceptsFirstResponder: Bool { true }
 
@@ -56,12 +54,6 @@ struct DetailActionButton: NSViewRepresentable {
       else { return false }
       if event.keyCode == 36 || event.keyCode == 76 || event.keyCode == 49 {
         activate()
-      } else if event.keyCode == 125 || event.charactersIgnoringModifiers == "j" {
-        guard let navigate else { return false }
-        navigate(1)
-      } else if event.keyCode == 126 || event.charactersIgnoringModifiers == "k" {
-        guard let navigate else { return false }
-        navigate(-1)
       } else {
         return false
       }

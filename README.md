@@ -8,7 +8,8 @@
   A native macOS pull-request HUD for the work that needs your attention.
 </p>
 
-Glance keeps your GitHub pull requests one click away in the menu bar. Open its compact popover for a quick check, or detach it into an always-on-top panel while you work.
+Glance keeps your GitHub pull requests one click away in the menu bar. Click its icon or use the global hotkey to open the same resizable, always-on-top panel while you work.
+Click outside the panel to hide it; its details popovers remain part of the panel.
 
 <p align="center">
   <img src="docs/images/glance-panel.png" width="360" alt="Glance showing pull requests that need attention">
@@ -34,7 +35,9 @@ Glance keeps your GitHub pull requests one click away in the menu bar. Open its 
 
 Command-click a pull request to dismiss its current revision. If a new commit is pushed, the pull request returns automatically. Use a row's context menu to pin it or snooze it.
 
-With the panel focused, use the arrow keys or J/K to move between pull requests, Return to open the selected pull request, D to dismiss it, P to pin it, R to refresh, and / to search.
+Press Control–Shift–Space to show and focus Glance from any app. Press it again while the panel has focus to hide it. With the dashboard focused, use the arrow keys or J/K to move between pull requests, Return to open the selected pull request, D to dismiss it, P to pin it, R to refresh, and / to search. Short sequences add more actions: C then U copies a URL; S then H snoozes for one hour. Prefixes show available next keys; Escape cancels.
+
+Settings → Keyboard lets you edit or record bindings. The same bindings live in `~/Library/Application Support/Glance/keybindings.json`, which reloads after external edits. See `docs/KEYBINDINGS.md` for all actions, defaults, config syntax, and focus rules.
 
 ## Install
 
@@ -73,6 +76,7 @@ Glance starts with sections for pull requests requesting your review and pull re
   also count pull requests you opened.
 - Sort each section by attention, review-request time, recent activity, repository, or stack order.
 - Control notifications, refresh frequency, launch behavior, and panel behavior.
+- Drag the panel’s edges or corners to resize it. The menu-bar icon and global hotkey open the same native window, and Glance remembers its size and position across launches.
 - Choose which pull-request transitions generate notifications and configure a global panel shortcut.
 - Adjust row details, including optional additions and deletions, review and check status icons,
   and completed-review filtering. Each row shows the time elapsed since the PR was created or

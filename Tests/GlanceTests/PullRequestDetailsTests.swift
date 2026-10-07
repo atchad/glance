@@ -18,20 +18,17 @@ final class PullRequestDetailsTests: XCTestCase {
   }
 
   @MainActor
-  func testNativeTriggerActivatesAndNavigatesWithUnmodifiedKeys() {
+  func testNativeTriggerActivatesAndLeavesNavigationToKeybindingModule() {
     let trigger = DetailActionButton.Trigger()
     var activations = 0
-    var movements: [Int] = []
     trigger.performAction = { activations += 1 }
-    trigger.navigate = { movements.append($0) }
     for code: UInt16 in [36, 76, 49] {
       trigger.keyDown(with: keyEvent(code: code))
     }
     for (code, characters): (UInt16, String) in [(125, ""), (126, ""), (38, "j"), (40, "k")] {
-      trigger.keyDown(with: keyEvent(code: code, characters: characters))
+      XCTAssertFalse(trigger.handleDetailKey(keyEvent(code: code, characters: characters)))
     }
     XCTAssertEqual(activations, 3)
-    XCTAssertEqual(movements, [1, -1, 1, -1])
     XCTAssertTrue(trigger.acceptsFirstResponder)
     XCTAssertFalse(trigger.handleDetailKey(keyEvent(code: 0, characters: "a")))
   }
@@ -55,7 +52,6 @@ final class PullRequestDetailsTests: XCTestCase {
   func testNativeTriggerLeavesModifiedKeysForNormalAppKitRouting() {
     let trigger = DetailActionButton.Trigger()
     trigger.performAction = { XCTFail("Modified key must not activate details") }
-    trigger.navigate = { _ in XCTFail("Modified key must not navigate rows") }
     for modifiers: NSEvent.ModifierFlags in [.command, .control, .option, .shift, [.command, .shift]] {
       for (code, characters): (UInt16, String) in [
         (36, "\r"), (76, "\r"), (49, " "), (125, ""), (126, ""), (38, "j"), (40, "k")

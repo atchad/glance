@@ -2,6 +2,7 @@ import Foundation
 
 /// The ordered, expanded search results used by both rendering and keyboard commands.
 struct DashboardNavigation {
+  static let snoozedSectionID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
   struct RowID: Hashable {
     let sectionID: UUID
     let pullRequestID: String
@@ -15,8 +16,14 @@ struct DashboardNavigation {
   private let sections: [(PRSection, [PullRequest])]
   let rows: [Row]
 
-  init(sections: [(PRSection, [PullRequest])], query: String) {
-    let filteredSections = sections.map { ($0.0, Self.filtered($0.1, query: query)) }
+  init(
+    sections: [(PRSection, [PullRequest])], query: String, snoozed: [PullRequest] = [],
+    snoozedIsCollapsed: Bool = true
+  ) {
+    let snoozedSection = PRSection(
+      id: Self.snoozedSectionID, name: "Snoozed", query: "", isCollapsed: snoozedIsCollapsed)
+    let filteredSections = (sections + [(snoozedSection, snoozed)])
+      .map { ($0.0, Self.filtered($0.1, query: query)) }
     self.sections = filteredSections
     rows = filteredSections.flatMap { section, items in
       section.isCollapsed ? [] : items.map {

@@ -4,32 +4,37 @@ import XCTest
 
 @MainActor
 final class ShortcutFeedbackTests: XCTestCase {
-  func testRegistrationFailureAndRecoveryFollowPreferenceChanges() throws {
+  func testRegistrationFailureRecoveryAndRecorderFollowConfigChanges() throws {
     let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: directory) }
-    let store = AppStore(storageDirectory: directory)
+    let keys = KeybindingStore(url: directory.appendingPathComponent("keybindings.json"), watch: false)
+    keys.edit { $0.globalHotkey = nil }
     var status = OSStatus(eventHotKeyExistsErr)
     var attempts = 0
-    let controller = GlobalShortcutController(store: store, action: {}, registerHotKey: { _, _, _ in
+    let controller = GlobalShortcutController(keys: keys, action: {}, registerHotKey: { _, _, _ in
       attempts += 1
       return status
     })
     withExtendedLifetime(controller) {
-      XCTAssertNil(store.shortcutErrorMessage)
-      store.preferences.globalShortcut = .optionG
+      XCTAssertNil(keys.registrationError)
+      keys.edit { $0.globalHotkey = "alt+g" }
       XCTAssertEqual(attempts, 1)
-      XCTAssertNotNil(store.shortcutErrorMessage)
+      XCTAssertNotNil(keys.registrationError)
       status = noErr
-      store.preferences.globalShortcut = .optionSpace
+      keys.edit { $0.globalHotkey = "alt+space" }
       XCTAssertEqual(attempts, 2)
-      XCTAssertNil(store.shortcutErrorMessage)
+      XCTAssertNil(keys.registrationError)
       status = OSStatus(eventHotKeyExistsErr)
-      store.preferences.globalShortcut = .controlSpace
-      XCTAssertNotNil(store.shortcutErrorMessage)
-      store.preferences.globalShortcut = .none
-      XCTAssertNil(store.shortcutErrorMessage)
+      keys.edit { $0.globalHotkey = "ctrl+space" }
+      XCTAssertNotNil(keys.registrationError)
+      keys.isRecording = true
+      XCTAssertNil(keys.registrationError)
       XCTAssertEqual(attempts, 3)
+      keys.isRecording = false
+      XCTAssertEqual(attempts, 4)
+      keys.edit { $0.globalHotkey = nil }
+      XCTAssertNil(keys.registrationError)
     }
   }
 }

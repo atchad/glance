@@ -1,38 +1,28 @@
 import AppKit
 import Combine
-import SwiftUI
 
 @MainActor
 final class StatusItemController: NSObject, ObservableObject {
   private let store: AppStore
+  private let keys: KeybindingStore
+  private let commands: ApplicationCommands
   private let panel: FloatingPanelController
-  private let settingsWindow: SettingsWindowController
-  private let updateController: UpdateController
-  private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-  private let popover = NSPopover()
+  private let statusItem: NSStatusItem
   private var cancellables: Set<AnyCancellable> = []
 
   init(
-    store: AppStore, panel: FloatingPanelController, settingsWindow: SettingsWindowController,
-    updateController: UpdateController
+    store: AppStore, keys: KeybindingStore, commands: ApplicationCommands,
+    panel: FloatingPanelController,
+    statusItem: NSStatusItem? = nil
   ) {
     self.store = store
+    self.keys = keys
+    self.commands = commands
     self.panel = panel
-    self.settingsWindow = settingsWindow
-    self.updateController = updateController
+    self.statusItem = statusItem ?? NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     super.init()
 
-    popover.behavior = .transient
-    popover.animates = true
-    popover.contentSize = NSSize(width: 390, height: 590)
-    popover.contentViewController = NSHostingController(
-      rootView: DashboardView(
-        store: store, surface: .menuBar, togglePanel: panel.toggle,
-        openSettings: { [weak self] in self?.showSettingsFromPopover() },
-        didOpenPullRequest: { [weak self] in self?.popover.performClose(nil) })
-    )
-
-    if let button = statusItem.button {
+    if let button = self.statusItem.button {
       button.image = Octicon.pullRequest.image
       button.imagePosition = .imageLeading
       button.target = self
@@ -53,44 +43,36 @@ final class StatusItemController: NSObject, ObservableObject {
   }
 
   @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
-    guard let event = NSApp.currentEvent else { return }
-    if event.type == .rightMouseDown {
+    if NSApp.currentEvent?.type == .rightMouseDown {
       showContextMenu(from: sender)
     } else {
-      togglePopover(from: sender)
-    }
-  }
-
-  private func togglePopover(from button: NSStatusBarButton) {
-    if popover.isShown {
-      popover.performClose(nil)
-    } else {
-      popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-      popover.contentViewController?.view.window?.makeKey()
+      commands.perform(panel.isVisible ? .hidePanel : .showPanel)
     }
   }
 
   private func showContextMenu(from button: NSStatusBarButton) {
-    popover.performClose(nil)
     let menu = NSMenu()
-    menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
-      .target = self
-    let updateItem = menu.addItem(
-      withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
-    updateItem.target = self
-    updateItem.isEnabled = updateController.canCheckForUpdates
+    addMenuItem(.settings, selector: #selector(openSettings), to: menu)
+    addMenuItem(.checkForUpdates, selector: #selector(checkForUpdates), to: menu)
     menu.addItem(.separator())
-    menu.addItem(withTitle: "Quit Glance", action: #selector(quit), keyEquivalent: "q").target =
-      self
+    addMenuItem(.quit, selector: #selector(quit), to: menu)
     menu.autoenablesItems = false
     menu.popUp(positioning: menu.items.first, at: NSPoint(x: 0, y: -4), in: button)
+  }
+
+  private func addMenuItem(_ action: GlanceAction, selector: Selector, to menu: NSMenu) {
+    let chord = keys.menuChord(for: action)
+    let item = menu.addItem(withTitle: action.title, action: selector, keyEquivalent: chord?.keyEquivalent ?? "")
+    item.keyEquivalentModifierMask = chord?.eventModifiers ?? []
+    item.target = self
+    item.isEnabled = commands.canPerform(action)
   }
 
   private func updateButton() {
     guard let button = statusItem.button else { return }
     button.image = Octicon.pullRequest.image
     button.setAccessibilityLabel("Glance pull requests")
-    button.setAccessibilityHelp("Open the pull request menu")
+    button.setAccessibilityHelp("Show or hide the resizable pull request panel")
     button.setAccessibilityValue(Self.accessibilityValue(
       count: store.menuBarCount, mode: store.preferences.menuBarCountMode,
       isRefreshing: store.isRefreshing, lastUpdated: store.lastUpdated,
@@ -123,18 +105,12 @@ final class StatusItemController: NSObject, ObservableObject {
   }
 
   @objc private func openSettings() {
-    showSettingsFromPopover()
+    commands.perform(.settings)
   }
 
   @objc private func checkForUpdates() {
-    updateController.checkForUpdates()
+    commands.perform(.checkForUpdates)
   }
 
-  private func showSettingsFromPopover() {
-    popover.performClose(nil)
-    panel.hide()
-    settingsWindow.show()
-  }
-
-  @objc private func quit() { NSApp.terminate(nil) }
+  @objc private func quit() { commands.perform(.quit) }
 }

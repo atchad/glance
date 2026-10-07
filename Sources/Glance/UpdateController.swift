@@ -9,9 +9,9 @@ final class UpdateController: ObservableObject {
   @Published private(set) var automaticallyDownloadsUpdates = false
   private var cancellables: Set<AnyCancellable> = []
 
-  init() {
+  init(startingUpdater: Bool = true) {
     updaterController = SPUStandardUpdaterController(
-      startingUpdater: true,
+      startingUpdater: startingUpdater,
       updaterDelegate: nil,
       userDriverDelegate: nil)
     let updater = updaterController.updater

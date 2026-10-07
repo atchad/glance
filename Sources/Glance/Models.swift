@@ -69,6 +69,13 @@ struct PullRequest: Codable, Identifiable, Hashable {
     viewerReviewRequested == nil ? nil : reviewRequestedAt
   }
 
+  func displayedTime(for mode: TimeDisplayMode) -> (date: Date, mode: TimeDisplayMode) {
+    if mode == .reviewRequested, let requestedAt = personalReviewRequestedAt {
+      return (requestedAt, .reviewRequested)
+    }
+    return (createdAt, .created)
+  }
+
   var revisionKey: String {
     headRefOID ?? updatedAt.ISO8601Format()
   }
@@ -214,6 +221,15 @@ struct PullRequest: Codable, Identifiable, Hashable {
     }
     return .init(level: .informational, reason: .active, message: "Active", priority: 800)
   }
+
+  // Review requests are implied by the section, drafts get a glyph, and Active carries no news.
+  var rowAttention: PRAttentionSummary? {
+    let attention = attention
+    switch attention.reason {
+    case .reviewRequested, .draft, .active: return nil
+    default: return attention
+    }
+  }
 }
 
 enum PRAttentionLevel: String, Codable {
@@ -358,14 +374,6 @@ enum MenuBarCountMode: String, Codable, CaseIterable, Identifiable {
   }
 }
 
-enum StatusDisplayMode: String, Codable, CaseIterable, Identifiable {
-  case compactIcons
-  case labeled
-
-  var id: String { rawValue }
-  var title: String { self == .compactIcons ? "Icons with author and time" : "Labeled row" }
-}
-
 enum TimeDisplayMode: String, Codable, CaseIterable, Identifiable {
   case created
   case reviewRequested
@@ -457,7 +465,6 @@ struct Preferences: Codable, Equatable {
   var showCheckStatus = true
   var showReviewStatus = true
   var showAttentionReason = true
-  var statusDisplayMode: StatusDisplayMode = .compactIcons
   var timeDisplayMode: TimeDisplayMode = .created
   var commandClickDismisses = true
   var removePullRequestsAfterApproval = true
@@ -487,7 +494,7 @@ struct Preferences: Codable, Equatable {
     case menuBarCountMode, includeMyPullRequestsInMenuBarCount
     case showAuthor, showUpdatedAt, showLineChanges, showCheckStatus, showReviewStatus
     case showAttentionReason
-    case statusDisplayMode, timeDisplayMode, commandClickDismisses, notificationsEnabled
+    case timeDisplayMode, commandClickDismisses, notificationsEnabled
     case removePullRequestsAfterApproval, showChangedPullRequestsAfterApproval
     case removePullRequestsAfterOtherApproval
     case showRerequestedPullRequestsAfterApproval
@@ -528,9 +535,6 @@ struct Preferences: Codable, Equatable {
     showReviewStatus = try values.decodeIfPresent(Bool.self, forKey: .showReviewStatus) ?? true
     showAttentionReason =
       try values.decodeIfPresent(Bool.self, forKey: .showAttentionReason) ?? true
-    statusDisplayMode =
-      try values.decodeIfPresent(StatusDisplayMode.self, forKey: .statusDisplayMode)
-      ?? .compactIcons
     timeDisplayMode =
       try values.decodeIfPresent(TimeDisplayMode.self, forKey: .timeDisplayMode) ?? .created
     commandClickDismisses =
@@ -579,7 +583,6 @@ struct Preferences: Codable, Equatable {
     try values.encode(showCheckStatus, forKey: .showCheckStatus)
     try values.encode(showReviewStatus, forKey: .showReviewStatus)
     try values.encode(showAttentionReason, forKey: .showAttentionReason)
-    try values.encode(statusDisplayMode, forKey: .statusDisplayMode)
     try values.encode(timeDisplayMode, forKey: .timeDisplayMode)
     try values.encode(commandClickDismisses, forKey: .commandClickDismisses)
     try values.encode(removePullRequestsAfterApproval, forKey: .removePullRequestsAfterApproval)
@@ -599,16 +602,44 @@ struct Preferences: Codable, Equatable {
   }
 }
 
-extension Date {
-  var ageLabel: String {
-    let seconds = max(0, Date().timeIntervalSince(self))
-    if seconds < 60 { return "now" }
-    if seconds < 3_600 { return "\(Int(seconds / 60))m ago" }
-    if seconds < 86_400 { return "\(Int(seconds / 3_600))h ago" }
-    if seconds < 604_800 { return "\(Int(seconds / 86_400))d ago" }
-    return self.formatted(.dateTime.month(.abbreviated).day())
+/// Whole minutes, hours, or days, rounded down and never less than one minute.
+struct ElapsedTime {
+  enum Unit { case minute, hour, day }
+
+  let value: Int
+  let unit: Unit
+
+  init(from start: Date, to end: Date) {
+    // Whole seconds absorb floating-point error when a timeline ticks exactly on a boundary.
+    let minutes = max(1, Int(end.timeIntervalSince(start).rounded() / 60))
+    if minutes < 60 {
+      (value, unit) = (minutes, .minute)
+    } else if minutes < 1_440 {
+      (value, unit) = (minutes / 60, .hour)
+    } else {
+      (value, unit) = (minutes / 1_440, .day)
+    }
   }
 
+  var abbreviated: String {
+    switch unit {
+    case .minute: "\(value)m"
+    case .hour: "\(value)h"
+    case .day: "\(value)d"
+    }
+  }
+
+  var spoken: String {
+    let noun = switch unit {
+    case .minute: "minute"
+    case .hour: "hour"
+    case .day: "day"
+    }
+    return "\(value) \(noun)\(value == 1 ? "" : "s")"
+  }
+}
+
+extension Date {
   var updatedLabel: String {
     let seconds = max(0, Date().timeIntervalSince(self))
     if seconds < 60 { return "Last updated just now" }

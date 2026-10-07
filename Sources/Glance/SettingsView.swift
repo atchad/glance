@@ -245,11 +245,8 @@ private struct ReviewSettingsPage: View {
           }
         }
         Toggle("Additions and deletions", isOn: $store.preferences.showLineChanges)
-        Toggle("Attention reason", isOn: $store.preferences.showAttentionReason)
-          .help("Show why each pull request needs attention or what it is waiting for.")
-        Picker("Status layout", selection: $store.preferences.statusDisplayMode) {
-          ForEach(StatusDisplayMode.allCases) { mode in Text(mode.title).tag(mode) }
-        }
+        Toggle("Attention reason icon", isOn: $store.preferences.showAttentionReason)
+          .help("Show an icon before the repository name. Hover over it to see why the pull request needs attention or what it is waiting for.")
         Toggle("Review status", isOn: $store.preferences.showReviewStatus)
         Toggle("Check status", isOn: $store.preferences.showCheckStatus)
         Toggle(

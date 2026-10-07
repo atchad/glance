@@ -191,7 +191,7 @@ struct DashboardView: View {
       }
       .buttonStyle(.borderless)
       .disabled(store.isRefreshing)
-      .help("Refresh now (R)")
+      .nativeHelp("Refresh now (R)")
       if surface == .menuBar {
         Button {
           togglePanel?()
@@ -207,7 +207,7 @@ struct DashboardView: View {
         Image(systemName: "gearshape")
       }
       .buttonStyle(.borderless)
-      .help("Settings")
+      .nativeHelp("Settings")
       .accessibilityLabel("Settings")
     }
     .padding(.horizontal, 14)
@@ -545,7 +545,11 @@ private struct OverlayScrollViewConfigurator: NSViewRepresentable {
   }
 }
 
-private struct PullRequestRow: View {
+struct PullRequestRow: View {
+  private static let verticalInset: CGFloat = 11
+  private static let summaryLineHeight: CGFloat = 17
+  private static let detailButtonHeight: CGFloat = 22
+
   let pullRequest: PullRequest
   let preferences: Preferences
   let open: () -> Void
@@ -561,13 +565,6 @@ private struct PullRequestRow: View {
   @State private var detailFocusRequest = 0
   @State private var hovering = false
 
-  private var displayedDate: Date {
-    if preferences.timeDisplayMode == .reviewRequested {
-      return pullRequest.personalReviewRequestedAt ?? pullRequest.createdAt
-    }
-    return pullRequest.createdAt
-  }
-
   var body: some View {
     ZStack(alignment: .topTrailing) {
       rowButton
@@ -579,8 +576,10 @@ private struct PullRequestRow: View {
         select()
         isShowingDetails = true
       }
-      .frame(width: 28, height: 22)
-      .padding(.top, 4).padding(.trailing, 5)
+      .frame(width: 28, height: Self.detailButtonHeight)
+      // Centered on the summary line.
+      .padding(.top, Self.verticalInset + (Self.summaryLineHeight - Self.detailButtonHeight) / 2)
+      .padding(.trailing, 5)
       .popover(isPresented: $isShowingDetails, arrowEdge: .trailing) {
         PullRequestDetailsView(pullRequest: pullRequest, checksAreCached: checksAreCached) {
           isShowingDetails = false
@@ -595,68 +594,12 @@ private struct PullRequestRow: View {
   private var rowButton: some View {
     Button(action: handleClick) {
       VStack(alignment: .leading, spacing: 4) {
-        HStack(spacing: 4) {
-          Text(pullRequest.repository).font(.caption.weight(.medium)).foregroundStyle(.secondary)
-            .lineLimit(1)
-          Text(verbatim: "#\(pullRequest.number)").font(.caption.monospacedDigit()).foregroundStyle(
-            .primary)
-          if let position = pullRequest.stackPosition, let size = pullRequest.stackSize, size > 1 {
-            StackBadge(position: position, size: size)
-          }
-          if pullRequest.isDraft { DraftBadge() }
-          if isPinned {
-            Image(systemName: "pin.fill")
-              .font(.caption2).foregroundStyle(.secondary)
-              .help("Pinned")
-              .accessibilityLabel("Pinned pull request")
-          }
-        }
-        .padding(.trailing, 24)
-        Text(pullRequest.title).font(.callout).foregroundStyle(.primary).lineLimit(2)
+        summaryLine
+          .padding(.trailing, 20)
+        Text(pullRequest.title).font(.callout).foregroundStyle(.primary).lineLimit(1)
           .multilineTextAlignment(.leading)
-        if preferences.showAttentionReason, pullRequest.attention.reason != .draft {
-          AttentionReasonLabel(summary: pullRequest.attention)
-        }
-        HStack(spacing: 7) {
-          if preferences.showAuthor {
-            AvatarView(url: pullRequest.authorAvatarURL)
-            Text(pullRequest.author).lineLimit(1)
-          }
-          if preferences.showAuthor && preferences.showUpdatedAt { Text("·") }
-          if preferences.showUpdatedAt {
-            Text(displayedDate.ageLabel)
-              .help(preferences.timeDisplayMode == .created ? "PR created" : "Review requested")
-          }
-          if preferences.showLineChanges {
-            if preferences.showAuthor || preferences.showUpdatedAt { Text("·") }
-            HStack(spacing: 4) {
-              Text(verbatim: "+\(pullRequest.additions)").foregroundStyle(.green)
-              Text(verbatim: "−\(pullRequest.deletions)").foregroundStyle(.red)
-            }
-            .fontDesign(.monospaced)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(
-              "\(pullRequest.additions) additions, \(pullRequest.deletions) deletions")
-            .help("Lines changed")
-          }
-          if preferences.statusDisplayMode == .compactIcons {
-            Spacer(minLength: 4)
-            if preferences.showReviewStatus { reviewLabel(showText: false) }
-            if preferences.showCheckStatus { checkLabel(showText: false) }
-          }
-        }
-        .font(.caption).foregroundStyle(.secondary)
-        if preferences.statusDisplayMode == .labeled
-          && (preferences.showReviewStatus || preferences.showCheckStatus)
-        {
-          HStack(spacing: 10) {
-            if preferences.showReviewStatus { reviewLabel(showText: true) }
-            if preferences.showCheckStatus { checkLabel(showText: true) }
-          }
-          .padding(.top, 1)
-        }
       }
-      .padding(.horizontal, 13).padding(.vertical, 9)
+      .padding(.horizontal, 13).padding(.vertical, Self.verticalInset)
       .frame(maxWidth: .infinity, alignment: .leading)
       .contentShape(Rectangle())
       .background(
@@ -668,7 +611,8 @@ private struct PullRequestRow: View {
     .onHover { hovering = $0 }
     .simultaneousGesture(TapGesture().onEnded(select))
     .accessibilityAddTraits(isSelected ? .isSelected : [])
-    .help(Text(verbatim: "Open #\(pullRequest.number) on GitHub"))
+    .accessibilityHint(Text(verbatim: "Open #\(pullRequest.number) on GitHub"))
+    // A row-wide .help overrides every nested icon's caption in SwiftUI.
     .contextMenu {
       Button("Open on GitHub", action: open)
       Button("Copy URL") {
@@ -712,43 +656,125 @@ private struct PullRequestRow: View {
     }
   }
 
-  @ViewBuilder private func checkLabel(showText: Bool) -> some View {
-    switch pullRequest.checksState {
-    case .success:
-      StatusLabel(icon: .checksPassed, text: "Checks passed", color: .statusGreen, showText: showText)
-    case .failure:
-      StatusLabel(icon: .checksFailed, text: "Checks failed", color: .red, showText: showText)
-    case .pending:
-      StatusLabel(icon: .checksRunning, text: "Checks running", color: .orange, showText: showText)
-    case .neutral:
-      if showText {
-        Label("Checks neutral", systemImage: "minus.circle")
-          .font(.caption2).foregroundStyle(.secondary)
-          .help("Checks neutral")
-      } else {
-        Image(systemName: "minus.circle")
-          .help("Checks neutral").accessibilityLabel("Checks neutral")
+  private var summaryLine: some View {
+    HStack(spacing: 7) {
+      HStack(spacing: 7) {
+        if preferences.showReviewStatus || preferences.showCheckStatus { statusSlots }
+        if preferences.showAttentionReason, let attention = pullRequest.rowAttention {
+          AttentionReasonIcon(summary: attention).fixedSize()
+        }
+        identity.layoutPriority(1)
+        if preferences.showAuthor { author }
+        if preferences.showLineChanges { lineChanges }
       }
-    case .unknown: EmptyView()
+      // Not a Spacer, which would compete with the author for width.
+      .frame(maxWidth: .infinity, alignment: .leading)
+      if preferences.showUpdatedAt {
+        let time = pullRequest.displayedTime(for: preferences.timeDisplayMode)
+        ElapsedTimeLabel(date: time.date, event: time.mode.title)
+      }
+    }
+    // Muted below standard secondary so the title stands apart from its metadata.
+    .font(.caption).foregroundStyle(.secondary.opacity(0.8))
+    .frame(minHeight: Self.summaryLineHeight)
+  }
+
+  // Fixed slots keep the status group aligned when a status is absent.
+  private var statusSlots: some View {
+    HStack(spacing: 4) {
+      if preferences.showReviewStatus { reviewIcon.frame(width: 11, height: 11) }
+      if preferences.showCheckStatus { checkIcon.frame(width: 11, height: 11) }
     }
   }
 
-  @ViewBuilder private func reviewLabel(showText: Bool) -> some View {
+  private var identity: some View {
+    HStack(spacing: 4) {
+      Text(pullRequest.repository).font(.caption.weight(.medium)).lineLimit(1)
+      Text(verbatim: "#\(pullRequest.number)").font(.caption.monospacedDigit()).fixedSize()
+      if let position = pullRequest.stackPosition, let size = pullRequest.stackSize, size > 1 {
+        StackBadge(position: position, size: size).fixedSize()
+      }
+      if pullRequest.isDraft {
+        OcticonImage(icon: .draft, size: 11)
+          .nativeHelp("Draft pull request")
+      }
+      if isPinned {
+        Image(systemName: "pin.fill")
+          .font(.caption2)
+          .nativeHelp("Pinned")
+          .accessibilityLabel("Pinned pull request")
+      }
+    }
+  }
+
+  private var author: some View {
+    HStack(spacing: 0) {
+      AvatarView(url: pullRequest.authorAvatarURL)
+      // A fragment such as "m…" says less than the avatar alone.
+      ViewThatFits(in: .horizontal) {
+        Text(pullRequest.author).lineLimit(1).padding(.leading, 4)
+        Color.clear.frame(width: 0, height: 0)
+      }
+    }
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(pullRequest.author)
+    .nativeHelp(pullRequest.author)
+  }
+
+  private var lineChanges: some View {
+    HStack(spacing: 4) {
+      Text(verbatim: "+\(pullRequest.additions)").foregroundStyle(.green)
+      Text(verbatim: "−\(pullRequest.deletions)").foregroundStyle(.red)
+    }
+    .fontDesign(.monospaced)
+    .fixedSize()
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel(
+      "\(pullRequest.additions) additions, \(pullRequest.deletions) deletions")
+    .nativeHelp("Lines changed")
+  }
+
+  @ViewBuilder private var checkIcon: some View {
+    switch pullRequest.checksState {
+    case .success: StatusIcon(icon: .checksPassed, text: "Checks passed", color: .statusGreen)
+    case .failure: StatusIcon(icon: .checksFailed, text: "Checks failed", color: .red)
+    case .pending: StatusIcon(icon: .checksRunning, text: "Checks running", color: .orange)
+    case .neutral:
+      Image(systemName: "minus.circle").resizable().scaledToFit()
+        .nativeHelp("Checks neutral").accessibilityLabel("Checks neutral")
+    case .unknown: Color.clear
+    }
+  }
+
+  @ViewBuilder private var reviewIcon: some View {
     switch pullRequest.reviewDecision {
-    case "APPROVED":
-      StatusLabel(icon: .approved, text: "Approved", color: .statusGreen, showText: showText)
+    case "APPROVED": StatusIcon(icon: .approved, text: "Approved", color: .statusGreen)
     case "CHANGES_REQUESTED":
-      StatusLabel(
-        icon: .changesRequested, text: "Changes requested", color: .red, showText: showText)
-    case "REVIEW_REQUIRED":
-      PendingReviewLabel(showText: showText)
-    default:
-      EmptyView()
+      StatusIcon(icon: .changesRequested, text: "Changes requested", color: .red)
+    case "REVIEW_REQUIRED": PendingReviewIcon()
+    default: Color.clear
     }
   }
 }
 
-private struct AttentionReasonLabel: View {
+private struct ElapsedTimeLabel: View {
+  let date: Date
+  let event: String
+
+  var body: some View {
+    // Aligned to the date itself, so each tick lands exactly when another minute has elapsed.
+    TimelineView(.periodic(from: date, by: 60)) { context in
+      let elapsed = ElapsedTime(from: date, to: context.date)
+      Text(verbatim: elapsed.abbreviated)
+        .accessibilityLabel(Text(verbatim: "\(event) \(elapsed.spoken) ago"))
+    }
+    .font(.caption.monospacedDigit())
+    .fixedSize()
+    .nativeHelp("\(event) \(date.formatted(date: .abbreviated, time: .shortened))")
+  }
+}
+
+private struct AttentionReasonIcon: View {
   let summary: PRAttentionSummary
 
   private var symbol: String {
@@ -778,32 +804,25 @@ private struct AttentionReasonLabel: View {
   }
 
   var body: some View {
-    Label {
-      Text(summary.message).foregroundStyle(.primary)
-    } icon: {
-      Image(systemName: symbol).foregroundStyle(color)
-    }
-      .font(.caption2.weight(.medium))
-      .lineLimit(1)
-      .help(summary.message)
+    Image(systemName: symbol)
+      .resizable()
+      .scaledToFit()
+      .frame(width: 11, height: 11)
+      .foregroundStyle(color)
+      .nativeHelp(summary.message)
+      .accessibilityElement(children: .ignore)
       .accessibilityLabel("Attention status: \(summary.message)")
   }
 }
 
-private struct PendingReviewLabel: View {
-  let showText: Bool
-
+private struct PendingReviewIcon: View {
   var body: some View {
-    HStack(spacing: 4) {
-      Circle()
-        .fill(.yellow)
-        .frame(width: 11, height: 11)
-      if showText { Text("Review pending").foregroundStyle(.secondary) }
-    }
-    .font(.caption2)
-    .help("Review pending")
-    .accessibilityElement(children: .ignore)
-    .accessibilityLabel("Review pending")
+    Circle()
+      .fill(.yellow)
+      .frame(width: 11, height: 11)
+      .nativeHelp("Review pending")
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel("Review pending")
   }
 }
 
@@ -822,39 +841,17 @@ private struct ResizeGrip: View {
   }
 }
 
-private struct StatusLabel: View {
+private struct StatusIcon: View {
   let icon: Octicon
   let text: String
   let color: Color
-  let showText: Bool
 
   var body: some View {
-    HStack(spacing: 4) {
-      OcticonImage(icon: icon, size: 11)
-        .foregroundStyle(color)
-      if showText { Text(text).foregroundStyle(.secondary) }
-    }
-    .font(.caption2)
-    .help(text)
-    .accessibilityElement(children: .ignore)
-    .accessibilityLabel(text)
-  }
-}
-
-private struct DraftBadge: View {
-  var body: some View {
-    HStack(spacing: 3) {
-      OcticonImage(icon: .draft, size: 10)
-      Text("Draft")
-    }
-    .font(.caption2.weight(.medium))
-    .foregroundStyle(.secondary)
-    .padding(.horizontal, 5)
-    .padding(.vertical, 2)
-    .background(Color.primary.opacity(0.08), in: Capsule())
-    .help("Draft pull request")
-    .accessibilityElement(children: .ignore)
-    .accessibilityLabel("Draft")
+    OcticonImage(icon: icon, size: 11)
+      .foregroundStyle(color)
+      .nativeHelp(text)
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(text)
   }
 }
 
@@ -868,11 +865,10 @@ private struct StackBadge: View {
       Text(verbatim: "\(position)/\(size)")
     }
     .font(.caption2.weight(.medium).monospacedDigit())
-    .foregroundStyle(.secondary)
     .padding(.horizontal, 5)
     .padding(.vertical, 2)
     .background(Color.primary.opacity(0.06), in: Capsule())
-    .help(Text(verbatim: "Stacked pull request \(position) of \(size)"))
+    .nativeHelp("Stacked pull request \(position) of \(size)")
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(Text(verbatim: "Stacked pull request \(position) of \(size)"))
   }

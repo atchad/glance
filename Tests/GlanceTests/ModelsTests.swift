@@ -87,6 +87,53 @@ final class ModelsTests: XCTestCase {
     XCTAssertEqual(Date().updatedLabel, "Last updated just now")
   }
 
+  func testElapsedTimeUsesOneWholeMinuteHourOrDayUnit() {
+    let start = Date(timeIntervalSince1970: 1_000_000)
+    let cases: [(seconds: TimeInterval, abbreviated: String, spoken: String)] = [
+      (-30, "1m", "1 minute"), (0, "1m", "1 minute"), (119, "1m", "1 minute"),
+      (119.999_999_9, "2m", "2 minutes"), (120, "2m", "2 minutes"),
+      (3_599, "59m", "59 minutes"), (3_600, "1h", "1 hour"),
+      (86_399, "23h", "23 hours"), (86_400, "1d", "1 day"), (400 * 86_400, "400d", "400 days"),
+    ]
+    for expected in cases {
+      let elapsed = ElapsedTime(from: start, to: start.addingTimeInterval(expected.seconds))
+      XCTAssertEqual(elapsed.abbreviated, expected.abbreviated, "\(expected.seconds)s")
+      XCTAssertEqual(elapsed.spoken, expected.spoken, "\(expected.seconds)s")
+    }
+  }
+
+  func testRowsOmitReviewRequestsDraftsAndGenericActivity() {
+    let requested = makePullRequest(reviewers: ["atchad"])
+    XCTAssertEqual(requested.attention.message, "Review requested")
+    XCTAssertNil(requested.rowAttention)
+    XCTAssertNil(makePullRequest(isDraft: true).rowAttention)
+    let active = makePullRequest(viewerDidAuthor: true)
+    XCTAssertEqual(active.attention.reason, .active)
+    XCTAssertNil(active.rowAttention)
+
+    let rerequested = makePullRequest(
+      reviewers: ["atchad"], reviewRequestedAt: Date(timeIntervalSince1970: 3),
+      viewerReviewState: "COMMENTED", viewerReviewSubmittedAt: Date(timeIntervalSince1970: 2))
+    XCTAssertEqual(rerequested.rowAttention?.message, "Review requested again")
+    let conversation = makePullRequest(viewerDidAuthor: true, unresolvedConversationCount: 1)
+    XCTAssertEqual(conversation.rowAttention?.message, "Resolve 1 conversation")
+  }
+
+  func testRowTimeFallsBackToCreationWithoutAPersonalRequestDate() {
+    let created = Date(timeIntervalSince1970: 100)
+    let requestedAt = Date(timeIntervalSince1970: 200)
+    let requested = makePullRequest(
+      reviewers: ["atchad"], reviewRequestedAt: requestedAt, createdAt: created)
+    XCTAssertEqual(requested.displayedTime(for: .reviewRequested).date, requestedAt)
+    XCTAssertEqual(requested.displayedTime(for: .reviewRequested).mode, .reviewRequested)
+    XCTAssertEqual(requested.displayedTime(for: .created).date, created)
+    XCTAssertEqual(requested.displayedTime(for: .created).mode, .created)
+
+    let unavailable = makePullRequest(reviewers: ["atchad"], createdAt: created)
+    XCTAssertEqual(unavailable.displayedTime(for: .reviewRequested).date, created)
+    XCTAssertEqual(unavailable.displayedTime(for: .reviewRequested).mode, .created)
+  }
+
   func testLineChangesDefaultOnPreservesSavedOptOut() throws {
     XCTAssertTrue(Preferences().showLineChanges)
     let json = """
@@ -109,7 +156,6 @@ final class ModelsTests: XCTestCase {
     XCTAssertTrue(preferences.showCheckStatus)
     XCTAssertTrue(preferences.showReviewStatus)
     XCTAssertTrue(preferences.showAttentionReason)
-    XCTAssertEqual(preferences.statusDisplayMode, .compactIcons)
     XCTAssertEqual(preferences.timeDisplayMode, .created)
     XCTAssertTrue(preferences.commandClickDismisses)
     XCTAssertTrue(preferences.removePullRequestsAfterApproval)
@@ -119,6 +165,18 @@ final class ModelsTests: XCTestCase {
     XCTAssertTrue(preferences.openAtLogin)
     XCTAssertFalse(preferences.notificationsEnabled)
     XCTAssertTrue(preferences.excludedRepositories.isEmpty)
+  }
+
+  func testRemovedStatusLayoutSettingDoesNotInvalidatePreferences() throws {
+    for value in [#""labeled""#, #""compactIcons""#, #""retired""#, "null", "3"] {
+      let json = #"{"statusDisplayMode":\#(value),"showAuthor":false}"#
+      let preferences = try JSONDecoder().decode(Preferences.self, from: Data(json.utf8))
+      XCTAssertFalse(preferences.showAuthor)
+      XCTAssertFalse(preferences.recoveredInvalidValues)
+      let encoded = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: JSONEncoder().encode(preferences)) as? [String: Any])
+      XCTAssertNil(encoded["statusDisplayMode"])
+    }
   }
 
   func testExplicitOpenPanelAtLaunchPreferenceIsPreserved() throws {
@@ -518,13 +576,16 @@ final class ModelsTests: XCTestCase {
     mergeQueuePosition: Int? = nil,
     lifecycleState: PullRequest.LifecycleState? = .open,
     stackPosition: Int? = nil,
-    stackID: String? = nil
+    stackID: String? = nil,
+    isDraft: Bool = false,
+    createdAt: Date = .now
   ) -> PullRequest {
     PullRequest(
       id: id, number: 1, repository: repository, title: "Test", author: "author",
       authorAvatarURL: nil, url: URL(string: "https://github.com/owner/repo/pull/1")!,
       branch: "feature", headRefOID: headRefOID,
-      createdAt: .now, reviewRequestedAt: reviewRequestedAt, updatedAt: updatedAt, isDraft: false,
+      createdAt: createdAt, reviewRequestedAt: reviewRequestedAt, updatedAt: updatedAt,
+      isDraft: isDraft,
       reviewDecision: reviewDecision,
       checksState: checks,
       additions: 1, deletions: 0, labels: [], requestedReviewers: reviewers,

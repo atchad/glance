@@ -17,8 +17,8 @@ Glance keeps your GitHub pull requests one click away in the menu bar. Open its 
 ## What Glance does
 
 - Shows review requests, pull requests you opened, and any other sections you define with GitHub search queries.
-- Explains why a pull request needs attention, including review requests, new commits, failed
-  checks, unresolved conversations, merge conflicts, and merge readiness.
+- Explains why a pull request needs attention, including repeated review requests, new commits,
+  failed checks, unresolved conversations, merge conflicts, and merge readiness.
 - Surfaces draft, review, aggregate check, merge-queue, auto-merge, and stacked-pull-request status
   without opening a browser.
 - Displays an attention count directly in the menu bar.
@@ -74,8 +74,12 @@ Glance starts with sections for pull requests requesting your review and pull re
 - Sort each section by attention, review-request time, recent activity, repository, or stack order.
 - Control notifications, refresh frequency, launch behavior, and panel behavior.
 - Choose which pull-request transitions generate notifications and configure a global panel shortcut.
-- Adjust row details, including optional additions and deletions, status presentation, and
-  completed-review filtering.
+- Adjust row details, including optional additions and deletions, review and check status icons,
+  and completed-review filtering. Each row shows the time elapsed since the PR was created or
+  your review was requested, such as 5m, 3h, or 2d.
+- Rows stay two lines: metadata above a single-line title. Attention reasons appear as icons
+  between the status icons and repository name; hover over an icon for its caption. Open Details
+  to read or copy a full title when it is truncated.
 
 Click a pull request to open it on GitHub. Its context menu can also copy the URL or branch name.
 
@@ -93,7 +97,7 @@ Missing local files are normal on first launch. If existing files are damaged or
 
 Approved PRs hidden by your filters are omitted from the offline cache unless pinned. After a restart, making those filters less restrictive may require a successful refresh to bring the PRs back. A pin does not override a repository exclusion.
 
-Check icons summarize GitHub's aggregate rollup. Glance does not offer a complete check-detail viewer; open the PR on GitHub for individual logs and the full list. When fetched detail is incomplete, attention text avoids an exact failing-check count.
+Check icons summarize GitHub's aggregate rollup. Glance does not offer a complete check-detail viewer; open the PR on GitHub for individual logs and the full list. When fetched detail is incomplete, attention captions avoid an exact failing-check count.
 
 ## Build from source
 

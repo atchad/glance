@@ -27,6 +27,8 @@ lipo dist/Glance.app/Contents/MacOS/Glance -verify_arch arm64 x86_64
 
 Local application bundles receive an ad-hoc signature when a Developer ID identity is not available. You do not need the maintainer's signing or notarization credentials to contribute.
 
+For changes to hover captions, run `zsh scripts/test-tooltip-hover.sh` in a macOS GUI session. It builds for release, opens the actual floating dashboard with fixture rows, and uses Vision to verify rendered tooltips across successive hovers, reopening, and refreshing. `GLANCE_TOOLTIP_CONFIGURATION=debug` selects a debug build. Leave the mouse and keyboard idle during the check; loss of focus or pointer movement is reported separately from a tooltip failure. It restores the previous pointer position and active app afterwards and never uses your GitHub account or Glance profile.
+
 ## Pull requests
 
 - Describe the problem and the behavior your change introduces.

@@ -45,7 +45,8 @@ struct GlanceApp: App {
 
   var body: some Scene {
     Settings {
-      GlanceSettingsView(store: store, panel: panel, updates: updates, keys: keys, commands: commands)
+      GlanceSettingsView(store: store, panel: panel, updates: updates, keys: keys, commands: commands,
+        navigation: settingsWindow.navigation)
     }
     .commands {
       CommandGroup(replacing: .appSettings) {

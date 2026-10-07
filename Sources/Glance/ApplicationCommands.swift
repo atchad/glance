@@ -31,6 +31,11 @@ final class ApplicationCommands: ObservableObject {
     self.settings = settings
   }
 
+  func showRepositoryColors(for repository: String) {
+    panel?.hide()
+    settings?.showRepositoryColors(for: repository)
+  }
+
   func canPerform(_ action: GlanceAction, target: CommandTarget = CommandTarget()) -> Bool {
     switch action {
     case .nextPR, .previousPR, .firstPR, .lastPR: return target.navigate != nil

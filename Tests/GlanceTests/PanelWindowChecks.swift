@@ -59,12 +59,13 @@ enum PanelWindowChecks {
       }
       try check(window is NSPanel && window.styleMask.contains(.resizable), "The displayed window must have native resize edges.")
       let originalFrame = window.frame
-      for height: CGFloat in [420, 700, 500] {
+      let visibleFrame = (window.screen ?? NSScreen.main)!.visibleFrame
+      for height in resizeHeights(for: window, visibleFrame: visibleFrame) {
         window.setContentSize(NSSize(width: 410, height: height))
         window.contentView?.layoutSubtreeIfNeeded()
         pump()
         try check(abs(window.contentRect(forFrameRect: window.frame).height - height) < 1,
-          "SwiftUI hosting must retain the resized content height \(height).")
+          "SwiftUI hosting must retain the resized content height \(height); actual \(window.contentRect(forFrameRect: window.frame).height), visible frame \(visibleFrame).")
         let stored = defaults.string(forKey: "floatingPanelFrame").map(NSRectFromString)
         try check(stored == window.frame, "Native resize notifications must save the complete window frame.")
       }
@@ -148,6 +149,15 @@ enum PanelWindowChecks {
       try check(restoredWindow?.frame == resizedFrame, "A new controller must restore the resized frame from disk.")
     }
     return checks
+  }
+
+  static func resizeHeights(for window: NSWindow, visibleFrame: NSRect) -> [CGFloat] {
+    // AppKit clamps oversized windows to the screen. Scale the test's resize
+    // range above its minimum so small CI displays still exercise distinct sizes.
+    let minimum = window.contentMinSize.height
+    let maximum = floor(window.contentRect(forFrameRect: visibleFrame).height)
+    let scale = min(1, (maximum - minimum) / (700 - minimum))
+    return [420, 700, 500].map { floor(minimum + ($0 - minimum) * scale) }
   }
 
   private static func pump() {

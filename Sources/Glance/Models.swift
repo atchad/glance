@@ -461,6 +461,7 @@ struct Preferences: Codable, Equatable {
   var notificationsEnabled = false
   var notificationEvents: Set<PRNotificationEvent> = [.reviewRequested]
   var excludedRepositories: Set<String> = []
+  var repositoryColors: [String: RepositoryColor] = [:]
   var dismissedRevisions: [String: String] = [:]
   var snoozes: [String: PRSnooze] = [:]
   var pinnedPullRequests: Set<String> = []
@@ -487,6 +488,7 @@ struct Preferences: Codable, Equatable {
     case removePullRequestsAfterOtherApproval
     case showRerequestedPullRequestsAfterApproval
     case excludedRepositories, mutedNotificationRepositories
+    case repositoryColors
     case dismissedRevisions
     case notificationEvents, snoozes, pinnedPullRequests, globalShortcut
   }
@@ -545,6 +547,21 @@ struct Preferences: Codable, Equatable {
       try values.decodeIfPresent(Set<String>.self, forKey: .excludedRepositories)
       ?? values.decodeIfPresent(Set<String>.self, forKey: .mutedNotificationRepositories)
       ?? []
+    if values.contains(.repositoryColors) {
+      if let stored = try? values.decode([String: String].self, forKey: .repositoryColors) {
+        for (repository, hex) in stored.sorted(by: { $0.key < $1.key }) {
+          guard let color = RepositoryColor(hex: hex) else {
+            recoveredInvalidValues = true
+            continue
+          }
+          let key = repository.lowercased()
+          if repositoryColors[key] != nil { recoveredInvalidValues = true }
+          else { repositoryColors[key] = color }
+        }
+      } else {
+        recoveredInvalidValues = true
+      }
+    }
     dismissedRevisions =
       try values.decodeIfPresent([String: String].self, forKey: .dismissedRevisions) ?? [:]
     snoozes = try values.decodeIfPresent([String: PRSnooze].self, forKey: .snoozes) ?? [:]
@@ -583,6 +600,7 @@ struct Preferences: Codable, Equatable {
     try values.encode(notificationsEnabled, forKey: .notificationsEnabled)
     try values.encode(notificationEvents, forKey: .notificationEvents)
     try values.encode(excludedRepositories, forKey: .excludedRepositories)
+    try values.encode(repositoryColors.mapValues(\.hex), forKey: .repositoryColors)
     try values.encode(dismissedRevisions, forKey: .dismissedRevisions)
     try values.encode(snoozes, forKey: .snoozes)
     try values.encode(pinnedPullRequests, forKey: .pinnedPullRequests)

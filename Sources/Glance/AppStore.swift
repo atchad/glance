@@ -133,6 +133,21 @@ final class AppStore: ObservableObject {
       if !preferences.excludedRepositories.isEmpty { saveCache() }
     }
     isLoadingStorage = false
+    assignRepositoryColors(for: snapshots.values.flatMap { $0.map(\.repository) })
+  }
+
+  var colorRepositories: [String] {
+    preferences.repositoryColors.keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+  }
+
+  func assignRepositoryColors(for repositories: [String]) {
+    var updated = preferences
+    updated.assignRepositoryColors(for: repositories)
+    preferences = updated
+  }
+
+  func setRepositoryColor(_ color: RepositoryColor, for repository: String) {
+    preferences.repositoryColors[repository.lowercased()] = color
   }
 
   var needsReviewCount: Int {
@@ -313,6 +328,7 @@ final class AppStore: ObservableObject {
           ? PRTransition.detect(previous: previousUnique, current: nextUnique,
             enabledEvents: preferences.notificationEvents) : []
         snapshots = nextSnapshots
+        assignRepositoryColors(for: nextSnapshots.values.flatMap { $0.map(\.repository) })
         // Failed sections may retain disk-loaded snapshots until a complete refresh.
         if sectionErrors.isEmpty { isShowingCachedData = false }
         let hasSuccessfulSection = sectionErrors.isEmpty

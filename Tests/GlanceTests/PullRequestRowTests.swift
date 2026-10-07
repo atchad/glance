@@ -69,7 +69,7 @@ final class PullRequestRowTests: XCTestCase {
     preferences.showAttentionReason = showsAttention
     let row = PullRequestRow(
       pullRequest: pullRequest, preferences: preferences,
-      keys: keys, perform: { _ in },
+      keys: keys, perform: { _ in }, editRepositoryColor: {},
       isPinned: false, isSelected: isSelected, select: {},
       isShowingDetails: .constant(false), checksAreCached: false)
     return row.frame(width: width)

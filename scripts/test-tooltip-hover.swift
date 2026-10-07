@@ -15,6 +15,7 @@ struct TooltipHoverTestRunner {
     let previousApp = NSWorkspace.shared.frontmostApplication
     let previousPointer = CGEvent(source: nil)!.location
     let directory = URL(fileURLWithPath: CommandLine.arguments[1])
+    let keys = KeybindingStore(url: directory.appendingPathComponent("keybindings.json"), watch: false)
     let store = AppStore(
       storageDirectory: directory,
       fetchSnapshots: { sections in
@@ -29,12 +30,14 @@ struct TooltipHoverTestRunner {
       })
     store.preferences.sections = [PRSection(name: "Tooltip checks", query: "is:pr")]
     store.preferences.notificationsEnabled = false
+    let updates = UpdateController(startingUpdater: false)
+    let commands = ApplicationCommands(store: store, updates: updates)
     // Host the real dashboard without touching the user's persisted panel frame.
     let window = NSPanel(contentRect: NSRect(x: 80, y: 160, width: 410, height: 620),
       styleMask: [.titled, .resizable], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     window.contentViewController = NSHostingController(
-      rootView: DashboardView(store: store, surface: .panel))
+      rootView: DashboardView(store: store, keys: keys, commands: commands))
     window.setContentSize(NSSize(width: 410, height: 620))
     app.activate(ignoringOtherApps: true)
     window.makeKeyAndOrderFront(nil)
@@ -52,7 +55,7 @@ struct TooltipHoverTestRunner {
         // Centers of the fixed 11pt metadata slots; nil targets the native Details control.
         let probes: [(CGFloat?, String)] = [
           (18.5, "Approved"), (33.5, "Checks failed"),
-          (51.5, "Fix failing checks"), (nil, "Read full title and fetched checks (I)"),
+          (51.5, "Fix failing checks"), (nil, keys.help(for: .details)),
         ]
         for phase in ["initial", "reopened", "refreshed"] {
           if phase == "reopened" {

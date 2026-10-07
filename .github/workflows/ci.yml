@@ -30,14 +30,17 @@ jobs:
           test "$(plutil -extract SURequireSignedFeed raw support/Info.plist)" = true
 
       - name: Run tests
-        run: swift test
+        run: |
+          swift test
+          zsh scripts/test-keybindings.sh
+          zsh scripts/test-panel-window.sh
 
       - name: Build universal application
         run: ./scripts/build-app.sh release
 
       - name: Verify application
         run: |
-          codesign --verify --deep --strict --verbose=2 dist/Glance.app
+          zsh scripts/verify-app-signing.sh dist/Glance.app
           lipo dist/Glance.app/Contents/MacOS/Glance -verify_arch arm64 x86_64
           test -d dist/Glance.app/Contents/Frameworks/Sparkle.framework
           test -f dist/Glance.app/Contents/Resources/Sparkle-LICENSE.txt

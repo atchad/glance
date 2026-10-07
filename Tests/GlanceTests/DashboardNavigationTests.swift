@@ -3,6 +3,52 @@ import XCTest
 @testable import Glance
 
 final class DashboardNavigationTests: XCTestCase {
+  func testSnoozedRowsAreCollapsedByDefault() {
+    let pr = makePullRequest()
+    let selected = DashboardNavigation.RowID(
+      sectionID: DashboardNavigation.snoozedSectionID, pullRequestID: pr.id)
+    let navigation = DashboardNavigation(sections: [], query: "", snoozed: [pr])
+    XCTAssertTrue(navigation.rows.isEmpty)
+    XCTAssertNil(navigation.moved(from: nil, by: 1))
+    XCTAssertNil(navigation.reconciled(selected))
+    XCTAssertNil(navigation.pullRequest(for: selected))
+    XCTAssertEqual(navigation.items(in: DashboardNavigation.snoozedSectionID).count, 1)
+  }
+
+  func testSnoozedRowsAreSelectableFilteredAndReconciledForWake() {
+    let pr = makePullRequest(repository: "owner/snoozed")
+    let navigation = DashboardNavigation(
+      sections: [], query: "snoozed", snoozed: [pr], snoozedIsCollapsed: false)
+    let selection = navigation.moved(from: nil, by: 1)
+    XCTAssertEqual(selection?.sectionID, DashboardNavigation.snoozedSectionID)
+    XCTAssertEqual(navigation.pullRequest(for: selection)?.id, pr.id)
+    XCTAssertNil(DashboardNavigation(
+      sections: [], query: "missing", snoozed: [pr], snoozedIsCollapsed: false).reconciled(selection))
+    XCTAssertNil(DashboardNavigation(
+      sections: [], query: "", snoozed: [], snoozedIsCollapsed: false).reconciled(selection))
+  }
+
+  func testCollapsingSnoozedClearsOnlyHiddenSelectionAndCanReopen() {
+    let section = PRSection(name: "Active", query: "")
+    let active = makePullRequest()
+    let snoozed = makePullRequest(id: "PR_2")
+    let expanded = DashboardNavigation(
+      sections: [(section, [active])], query: "", snoozed: [snoozed], snoozedIsCollapsed: false)
+    let activeID = expanded.rows.first?.id
+    let snoozedID = expanded.rows.last?.id
+    XCTAssertEqual(snoozedID?.sectionID, DashboardNavigation.snoozedSectionID)
+    XCTAssertEqual(expanded.moved(from: activeID, by: 1), snoozedID)
+    let collapsed = DashboardNavigation(
+      sections: [(section, [active])], query: "", snoozed: [snoozed], snoozedIsCollapsed: true)
+    XCTAssertNil(collapsed.reconciled(snoozedID))
+    XCTAssertNil(collapsed.pullRequest(for: snoozedID))
+    XCTAssertEqual(collapsed.reconciled(activeID), activeID)
+    XCTAssertEqual(collapsed.moved(from: activeID, by: 1), activeID)
+    let reopened = DashboardNavigation(
+      sections: [(section, [active])], query: "", snoozed: [snoozed], snoozedIsCollapsed: false)
+    XCTAssertEqual(reopened.pullRequest(for: snoozedID)?.id, snoozed.id)
+  }
+
   func testCollapsedRowsCannotBeSelectedOrActedOn() {
     let first = PRSection(name: "First", query: "", isCollapsed: true)
     let second = PRSection(name: "Second", query: "", isCollapsed: true)

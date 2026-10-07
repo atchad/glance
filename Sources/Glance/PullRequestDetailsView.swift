@@ -5,6 +5,7 @@ import SwiftUI
 struct PullRequestDetailsView: View {
   let pullRequest: PullRequest
   let checksAreCached: Bool
+  var copy: (() -> Void)? = nil
   let close: () -> Void
   @Environment(\.openURL) private var openURL
   @State private var copyFocusRequest = 0
@@ -67,7 +68,7 @@ struct PullRequestDetailsView: View {
       }
       .frame(height: 340)
       DetailActionButton(label: "Copy title", title: "Copy title", focusRequest: copyFocusRequest) {
-        Self.copyTitle(pullRequest.title, to: .general)
+        if let copy { copy() } else { Self.copyTitle(pullRequest.title, to: .general) }
       }
       .frame(width: 90, height: 24)
     }
@@ -78,8 +79,7 @@ struct PullRequestDetailsView: View {
   }
 
   static func copyTitle(_ title: String, to pasteboard: NSPasteboard) {
-    pasteboard.clearContents()
-    pasteboard.setString(title, forType: .string)
+    ApplicationCommands.copy(title, to: pasteboard)
   }
 }
 

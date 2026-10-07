@@ -1,7 +1,7 @@
 import SwiftUI
 
 private enum SettingsCategory: String, CaseIterable, Identifiable {
-  case general, reviews, github, sections, updates
+  case general, reviews, github, sections, keyboard, updates
 
   var id: Self { self }
   var title: String {
@@ -10,6 +10,7 @@ private enum SettingsCategory: String, CaseIterable, Identifiable {
     case .reviews: "Pull requests"
     case .github: "GitHub"
     case .sections: "Sections"
+    case .keyboard: "Keyboard"
     case .updates: "Software Update"
     }
   }
@@ -19,6 +20,7 @@ private enum SettingsCategory: String, CaseIterable, Identifiable {
     case .reviews: "arrow.triangle.branch"
     case .github: "chevron.left.forwardslash.chevron.right"
     case .sections: "list.bullet.rectangle"
+    case .keyboard: "keyboard"
     case .updates: "arrow.triangle.2.circlepath"
     }
   }
@@ -28,6 +30,7 @@ private enum SettingsCategory: String, CaseIterable, Identifiable {
     case .reviews: Color(nsColor: .systemIndigo)
     case .github: Color(nsColor: .systemBlue)
     case .sections: Color(nsColor: .systemTeal)
+    case .keyboard: Color(nsColor: .systemOrange)
     case .updates: Color(nsColor: .systemGreen)
     }
   }
@@ -66,6 +69,8 @@ struct GlanceSettingsView: View {
   @ObservedObject var store: AppStore
   @ObservedObject var panel: FloatingPanelController
   @ObservedObject var updates: UpdateController
+  @ObservedObject var keys: KeybindingStore
+  let commands: ApplicationCommands
   @State private var selection: SettingsCategory = .general
   @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
@@ -90,9 +95,10 @@ struct GlanceSettingsView: View {
     switch selection {
     case .general: GeneralSettingsPage(store: store, panel: panel)
     case .reviews: ReviewSettingsPage(store: store)
-    case .github: GitHubSettingsPage(store: store)
+    case .github: GitHubSettingsPage(store: store, commands: commands)
     case .sections: SectionSettingsView(store: store)
-    case .updates: UpdateSettingsPage(updates: updates)
+    case .keyboard: KeyboardSettingsPage(keys: keys)
+    case .updates: UpdateSettingsPage(updates: updates, commands: commands)
     }
   }
 }
@@ -134,19 +140,11 @@ private struct GeneralSettingsPage: View {
               store.preferences.panelLevel = $0 ? .floating : .desktop
               panel.applyLevel()
             }))
-          .help("Keep the detached panel in front of other windows while it is visible.")
-        Picker("Show or hide Glance", selection: $store.preferences.globalShortcut) {
-          ForEach(GlobalShortcut.allCases) { shortcut in Text(shortcut.title).tag(shortcut) }
-        }
-        .help("Choose a system-wide keyboard shortcut for the Glance panel.")
-        if let error = store.shortcutErrorMessage {
-          Label(error, systemImage: "exclamationmark.triangle")
-            .font(.caption).foregroundStyle(.orange)
-        }
+          .help("Keep the panel in front of other windows while it is visible.")
       } header: {
         Text("Window")
       } footer: {
-        Text("Keep the detached panel visible while you work in another app.")
+        Text("Drag the panel’s edges to resize it. Glance remembers its size and position across launches.")
       }
     }
   }
@@ -154,6 +152,7 @@ private struct GeneralSettingsPage: View {
 
 private struct UpdateSettingsPage: View {
   @ObservedObject var updates: UpdateController
+  let commands: ApplicationCommands
 
   var body: some View {
     SettingsForm {
@@ -170,7 +169,7 @@ private struct UpdateSettingsPage: View {
             set: { updates.setAutomaticallyDownloadsUpdates($0) })
         )
         .disabled(!updates.automaticallyChecksForUpdates)
-        Button("Check Now") { updates.checkForUpdates() }
+        Button("Check Now") { commands.perform(.checkForUpdates) }
           .disabled(!updates.canCheckForUpdates)
       }
       Section("Installed Version") {
@@ -275,6 +274,7 @@ private struct ReviewSettingsPage: View {
 
 private struct GitHubSettingsPage: View {
   @ObservedObject var store: AppStore
+  let commands: ApplicationCommands
   @State private var showingRepositoryPicker = false
   var body: some View {
     SettingsForm {
@@ -284,7 +284,7 @@ private struct GitHubSettingsPage: View {
         LabeledContent("Authentication") {
           HStack {
             Link("GitHub CLI Setup…", destination: URL(string: "https://cli.github.com/")!)
-            Button("Check Connection") { store.refresh() }
+            Button("Check Connection") { commands.perform(.refresh) }
           }
           .accessibilityElement(children: .contain)
         }

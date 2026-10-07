@@ -10,6 +10,9 @@ if [[ ! -f "$repo_root/support/Glance.icns" ]]; then
 fi
 
 build_arguments=(-c "$configuration")
+if [[ -n "${GLANCE_SDK_PATH:-}" ]]; then
+    build_arguments+=(--sdk "$GLANCE_SDK_PATH")
+fi
 if [[ "$configuration" == "release" && "${GLANCE_UNIVERSAL_BUILD:-1}" != "0" ]]; then
     build_arguments+=(--arch arm64 --arch x86_64)
 fi
@@ -46,10 +49,13 @@ if [[ -z "$signing_identity" ]]; then
     signing_identity="-"
 fi
 
-signing_arguments=(--force --options runtime --sign "$signing_identity")
+signing_arguments=(--force --sign "$signing_identity")
 if [[ "$signing_identity" != "-" ]]; then
-    signing_arguments+=(--timestamp)
+    signing_arguments+=(--options runtime --timestamp)
 fi
+# Ad-hoc signatures have no Team ID. Hardened runtime's library validation can
+# reject bundled Sparkle even when both signatures are valid. Keep that mode
+# for certificate-signed builds, where all nested code shares the same identity.
 
 codesign "${signing_arguments[@]}" \
     "$sparkle_framework/Versions/B/XPCServices/Installer.xpc"
@@ -59,5 +65,6 @@ codesign "${signing_arguments[@]}" "$sparkle_framework/Versions/B/Autoupdate"
 codesign "${signing_arguments[@]}" "$sparkle_framework/Versions/B/Updater.app"
 codesign "${signing_arguments[@]}" "$sparkle_framework"
 codesign "${signing_arguments[@]}" "$app_path"
+zsh "$repo_root/scripts/verify-app-signing.sh" "$app_path"
 
 echo "$app_path"

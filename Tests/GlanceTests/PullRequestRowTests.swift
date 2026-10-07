@@ -5,6 +5,19 @@ import XCTest
 
 @MainActor
 final class PullRequestRowTests: XCTestCase {
+  private var directory: URL!
+  private var keys: KeybindingStore!
+
+  override func setUpWithError() throws {
+    directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    keys = KeybindingStore(url: directory.appendingPathComponent("keybindings.json"), watch: false)
+  }
+
+  override func tearDownWithError() throws {
+    keys = nil
+    try FileManager.default.removeItem(at: directory)
+  }
+
   func testAttentionDoesNotAddHeightToRows() {
     for width: CGFloat in [280, 360, 600] {
       for checks: PullRequest.CheckState in [.failure, .pending, .success] {
@@ -56,8 +69,8 @@ final class PullRequestRowTests: XCTestCase {
     preferences.showAttentionReason = showsAttention
     let row = PullRequestRow(
       pullRequest: pullRequest, preferences: preferences,
-      open: {}, dismiss: {}, togglePin: {}, snooze: { _ in },
-      isPinned: false, isSelected: isSelected, select: {}, navigate: { _ in },
+      keys: keys, perform: { _ in },
+      isPinned: false, isSelected: isSelected, select: {},
       isShowingDetails: .constant(false), checksAreCached: false)
     return row.frame(width: width)
   }

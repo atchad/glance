@@ -1,0 +1,36 @@
+name: Dependabot auto-merge
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  enable-auto-merge:
+    if: >-
+      github.repository == 'atchad/glance' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.user.id == 49699333 &&
+      github.event.pull_request.user.type == 'Bot' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # Never check out or execute PR code in this privileged workflow.
+      - name: Verify Dependabot metadata and commit provenance
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # v2.5.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Enable auto-merge for every update type
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        # GitHub enforces required checks and branch rules; never use --admin.
+        run: gh pr merge --auto --squash --match-head-commit "$PR_HEAD" "$PR_URL"

@@ -50,3 +50,7 @@ All required GitHub Actions checks must pass before a pull request can be merged
 ## Security reports
 
 Do not disclose a suspected vulnerability in a pull request. Follow [the security policy](SECURITY.md) instead.
+
+## Dependency updates
+
+Verified Dependabot pull requests are enrolled in GitHub auto-merge for all update types, including major updates. The workflow does not check out or run pull-request code with its write token. Main-branch rules still require up-to-date passing CI; failures or conflicts prevent merging. No human approval is currently required by the ruleset.

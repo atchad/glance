@@ -3,6 +3,7 @@ import SwiftUI
 
 @main
 struct GlanceApp: App {
+  @NSApplicationDelegateAdaptor(GlanceAppDelegate.self) private var appDelegate
   @StateObject private var store: AppStore
   @StateObject private var panel: FloatingPanelController
   @StateObject private var settingsWindow: SettingsWindowController
@@ -35,8 +36,9 @@ struct GlanceApp: App {
     _globalShortcut = StateObject(wrappedValue: globalShortcut)
     _keys = StateObject(wrappedValue: keys)
     _commands = StateObject(wrappedValue: commands)
+    appDelegate.commands = commands
+    appDelegate.configureDockIcon(store: store)
     DispatchQueue.main.async {
-      NSApp.setActivationPolicy(.accessory)
       store.configureLoginItemAtLaunch()
       store.start()
       if store.preferences.openPanelAtLaunch { panel.show() }

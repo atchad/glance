@@ -440,6 +440,7 @@ struct Preferences: Codable, Equatable {
     interval.isFinite && (15...900).contains(interval) ? interval : 60
   }
   var appearanceMode: AppearanceMode = .system
+  var showDockIcon = true
   var panelLevel: PanelLevel = .floating
   var openPanelAtLaunch = false
   var openAtLogin = true
@@ -479,7 +480,7 @@ struct Preferences: Codable, Equatable {
   }
 
   private enum CodingKeys: String, CodingKey {
-    case refreshInterval, appearanceMode, panelLevel, openPanelAtLaunch, openAtLogin, sections
+    case refreshInterval, appearanceMode, showDockIcon, panelLevel, openPanelAtLaunch, openAtLogin, sections
     case menuBarCountMode, includeMyPullRequestsInMenuBarCount
     case showAuthor, showUpdatedAt, showLineChanges, showCheckStatus, showReviewStatus
     case showAttentionReason
@@ -503,6 +504,7 @@ struct Preferences: Codable, Equatable {
       && (storedInterval == nil || storedInterval != refreshInterval)
     appearanceMode =
       try values.decodeIfPresent(AppearanceMode.self, forKey: .appearanceMode) ?? .system
+    showDockIcon = try values.decodeIfPresent(Bool.self, forKey: .showDockIcon) ?? true
     panelLevel = try values.decodeIfPresent(PanelLevel.self, forKey: .panelLevel) ?? .floating
     openPanelAtLaunch = try values.decodeIfPresent(Bool.self, forKey: .openPanelAtLaunch) ?? false
     openAtLogin = try values.decodeIfPresent(Bool.self, forKey: .openAtLogin) ?? true
@@ -575,6 +577,7 @@ struct Preferences: Codable, Equatable {
     var values = encoder.container(keyedBy: CodingKeys.self)
     try values.encode(refreshInterval, forKey: .refreshInterval)
     try values.encode(appearanceMode, forKey: .appearanceMode)
+    try values.encode(showDockIcon, forKey: .showDockIcon)
     try values.encode(panelLevel, forKey: .panelLevel)
     try values.encode(openPanelAtLaunch, forKey: .openPanelAtLaunch)
     try values.encode(openAtLogin, forKey: .openAtLogin)

@@ -15,7 +15,25 @@ cd glance
 open dist/Glance.app
 ```
 
-Run the same core checks used by CI:
+### Testing without disrupting your desktop
+
+The full suite includes tests that open windows and change application focus. Run
+those tests in a dedicated macOS VM or CI runner, not on a desktop being used for work.
+On your working Mac, run the non-interactive subset instead:
+
+```sh
+swift test --skip PanelWindowTests
+```
+
+For local GUI testing on Apple silicon, [Tart](https://tart.run/quick-start/) can run
+a macOS VM with its own logged-in desktop even when started with `tart run --no-graphics`.
+Run the tests through SSH in the guest; keep source and build output on the guest's
+local disk, and do not share your personal Glance profile or GitHub credentials.
+A separate macOS desktop Space does not isolate focus or keyboard input.
+
+### Full checks in an isolated macOS desktop
+
+Run the same core checks used by CI inside the VM or dedicated runner:
 
 ```sh
 zsh -n scripts/*.sh

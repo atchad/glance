@@ -139,6 +139,15 @@ enum PanelWindowChecks {
       NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp)
       pump()
       try check(!panel.isVisible, "Reactivating Glance must not reopen a dismissed dashboard.")
+      let appDelegate = GlanceAppDelegate()
+      appDelegate.commands = commands
+      try check(appDelegate.applicationShouldHandleReopen(NSApp, hasVisibleWindows: true) && !panel.isVisible,
+        "Clicking the Dock icon must only bring forward Glance windows that are already visible.")
+      try check(!appDelegate.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false),
+        "Glance must handle a Dock click when none of its windows are visible.")
+      pump()
+      try check(panel.isVisible && window.frame == resizedFrame,
+        "Clicking the Dock icon with no visible windows must reopen the dashboard in its saved frame.")
       panel.hide()
 
       let restored = FloatingPanelController(store: store, keys: keys, commands: commands, defaults: defaults)

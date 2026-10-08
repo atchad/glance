@@ -35,6 +35,7 @@ jobs:
           zsh scripts/test-keybindings.sh
           zsh scripts/test-panel-window.sh
           zsh scripts/test-repository-color-window.sh
+          zsh scripts/test-pr-browser.sh
 
       - name: Build universal application
         run: ./scripts/build-app.sh release

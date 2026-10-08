@@ -3,8 +3,10 @@ import UserNotifications
 
 final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
   private let center = UNUserNotificationCenter.current()
+  private let openURL: @MainActor (URL) -> Void
 
-  override init() {
+  init(openURL: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }) {
+    self.openURL = openURL
     super.init()
     center.delegate = self
   }
@@ -49,6 +51,6 @@ final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
       let value = response.notification.request.content.userInfo["url"] as? String,
       let url = URL(string: value)
     else { return }
-    DispatchQueue.main.async { NSWorkspace.shared.open(url) }
+    DispatchQueue.main.async { self.openURL(url) }
   }
 }

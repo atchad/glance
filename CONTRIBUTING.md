@@ -23,6 +23,7 @@ swift test
 zsh scripts/test-keybindings.sh
 zsh scripts/test-panel-window.sh
 zsh scripts/test-repository-color-window.sh
+zsh scripts/test-pr-browser.sh
 ./scripts/build-app.sh release
 zsh scripts/verify-app-signing.sh dist/Glance.app
 lipo dist/Glance.app/Contents/MacOS/Glance -verify_arch arm64 x86_64
@@ -31,6 +32,11 @@ lipo dist/Glance.app/Contents/MacOS/Glance -verify_arch arm64 x86_64
 Local application bundles receive an ad-hoc signature without hardened runtime when a Developer ID identity is not available. This allows macOS to load bundled frameworks that have no Team ID. Certificate-signed builds keep hardened runtime and timestamping. You do not need the maintainer's signing or notarization credentials to contribute.
 
 `test-panel-window.sh` exercises the actual AppKit menu-bar button and panel, including resize notifications, reopening, and saved-frame restoration. It requires a macOS GUI session but not XCTest; `GLANCE_SDK_PATH` selects a specific installed SDK if needed.
+
+`test-pr-browser.sh` exercises a real retained WebKit page with an offline HTML fixture,
+including scroll position, a comment draft, expanded discussions, navigation, close/reopen,
+reload cancellation, and cleanup. It requires a macOS GUI session but does not contact
+GitHub or use your browser sign-in. `GLANCE_SDK_PATH` selects a specific installed SDK.
 
 For changes to hover captions, run `zsh scripts/test-tooltip-hover.sh` in a macOS GUI session. It builds for release, opens the actual floating dashboard with fixture rows, and uses Vision to verify rendered tooltips across successive hovers, reopening, and refreshing. `GLANCE_TOOLTIP_CONFIGURATION=debug` selects a debug build. Leave the mouse and keyboard idle during the check; loss of focus or pointer movement is reported separately from a tooltip failure. It restores the previous pointer position and active app afterwards and never uses your GitHub account or Glance profile.
 

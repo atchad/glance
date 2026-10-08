@@ -7,6 +7,7 @@ struct PullRequestDetailsView: View {
   let checksAreCached: Bool
   var copy: (() -> Void)? = nil
   var repositoryColor: RepositoryColor? = nil
+  var openLink: ((URL) -> Void)? = nil
   var editRepositoryColor: (() -> Void)? = nil
   let close: () -> Void
   @Environment(\.openURL) private var openURL
@@ -56,7 +57,9 @@ struct PullRequestDetailsView: View {
                     .foregroundStyle(check.state.detailColor)
                   Spacer()
                   if let url = check.detailsURL {
-                    Button("Open check") { openURL(url) }
+                    Button("Open check") {
+                      if let openLink { openLink(url) } else { openURL(url) }
+                    }
                       .accessibilityLabel("Open check: \(check.name)")
                   } else {
                     Text("No link available").foregroundStyle(.secondary)

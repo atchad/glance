@@ -94,6 +94,57 @@ struct GitHubClient {
     return now.addingTimeInterval(60)
   }
 
+  func performMergeAction(_ action: PullRequestMergeAction, on pullRequest: PullRequest)
+    async throws -> PullRequestMergeResult
+  {
+    let control = PullRequestMergeControl(pullRequest: pullRequest)
+    guard control.action == action else {
+      throw GitHubError.api(control.help)
+    }
+    let (mutation, inputType) = switch action {
+    case .merge: ("mergePullRequest", "MergePullRequestInput")
+    case .enableAutoMerge: ("enablePullRequestAutoMerge", "EnablePullRequestAutoMergeInput")
+    case .disableAutoMerge: ("disablePullRequestAutoMerge", "DisablePullRequestAutoMergeInput")
+    case .markReadyForReview: ("markPullRequestReadyForReview", "MarkPullRequestReadyForReviewInput")
+    }
+    let query = """
+      mutation GlanceMergeAction($input: \(inputType)!) {
+        result: \(mutation)(input: $input) {
+          pullRequest { id state merged isDraft autoMergeRequest { enabledAt } }
+        }
+      }
+      """
+    var input = ["pullRequestId": pullRequest.id]
+    if action.requiresExpectedHead {
+      guard let method = pullRequest.mergeCapabilities?.preferredMethod else { throw GitHubError.invalidResponse }
+      input["mergeMethod"] = method.rawValue.uppercased()
+      // Actions that can merge refuse commits pushed after the displayed revision.
+      input["expectedHeadOid"] = pullRequest.headRefOID
+    }
+    let credential = try await session.credential()
+    let body = try JSONSerialization.data(withJSONObject: ["query": query, "variables": ["input": input]])
+    let request = requestFactory.graphQLRequest(body: body, credential: credential)
+    let (data, http) = try await responseData(for: request)
+    guard (200..<300).contains(http.statusCode) else {
+      throw GitHubError.api((try? JSONDecoder().decode(RESTError.self, from: data).message)
+        ?? "GitHub could not update this pull request (status \(http.statusCode)).")
+    }
+    let decoded = try JSONDecoder().decode(MergeActionResponse.self, from: data)
+    if let message = decoded.errors?.first?.message { throw GitHubError.api(message) }
+    guard let result = decoded.data?.result?.pullRequest, result.id == pullRequest.id,
+      let lifecycle = PullRequest.lifecycleState(state: result.state, merged: result.merged)
+    else { throw GitHubError.invalidResponse }
+    let confirmed = switch action {
+    case .merge: lifecycle == .merged
+    case .enableAutoMerge: lifecycle == .merged || (lifecycle == .open && result.autoMergeRequest != nil)
+    case .disableAutoMerge: result.autoMergeRequest == nil
+    case .markReadyForReview: lifecycle == .open && !result.isDraft
+    }
+    guard confirmed else { throw GitHubError.invalidResponse }
+    return PullRequestMergeResult(id: result.id, lifecycleState: lifecycle,
+      autoMergeEnabled: result.autoMergeRequest != nil, isDraft: result.isDraft)
+  }
+
   func fetchAccessibleRepositories() async throws -> [String] {
     let credential = try await session.credential()
     var page = 1
@@ -330,12 +381,16 @@ struct GitHubClient {
             ... on PullRequest {
               id number title url headRefName headRefOid createdAt updatedAt isDraft state merged
               additions deletions reviewDecision viewerDidAuthor mergeable mergeStateStatus
+              viewerCanEnableAutoMerge viewerCanDisableAutoMerge viewerCanUpdate
               autoMergeRequest { enabledAt }
               mergeQueueEntry { position }
               stack { id size }
               stackEntry { position }
               author { login avatarUrl }
-              repository { nameWithOwner }
+              repository {
+                nameWithOwner autoMergeAllowed viewerPermission
+                squashMergeAllowed mergeCommitAllowed rebaseMergeAllowed
+              }
               labels(first: 10) { nodes { name } }
               reviewRequests(first: 100) {
                 pageInfo { hasNextPage endCursor }
@@ -504,7 +559,30 @@ private struct RawPullRequest: Decodable {
     let login: String
     let avatarUrl: URL?
   }
-  struct Repository: Decodable { let nameWithOwner: String }
+  struct Repository: Decodable {
+    let nameWithOwner: String
+    let autoMergeAllowed: Bool?
+    let viewerPermission: String?
+    let squashMergeAllowed: Bool?
+    let mergeCommitAllowed: Bool?
+    let rebaseMergeAllowed: Bool?
+
+    func mergeCapabilities(
+      viewerCanEnableAutoMerge: Bool?, viewerCanDisableAutoMerge: Bool?,
+      viewerCanUpdate: Bool?, viewerDidAuthor: Bool?
+    ) -> PullRequest.MergeCapabilities? {
+      guard let autoMergeAllowed, let squashMergeAllowed,
+        let mergeCommitAllowed, let rebaseMergeAllowed else { return nil }
+      let method: PullRequest.MergeMethod? = squashMergeAllowed ? .squash
+        : mergeCommitAllowed ? .merge : rebaseMergeAllowed ? .rebase : nil
+      let canMerge = ["ADMIN", "MAINTAIN", "WRITE"].contains(viewerPermission ?? "")
+      // Authors and repository writers can publish drafts; triage access alone cannot.
+      let canMarkReady = viewerCanUpdate.map { $0 && (viewerDidAuthor == true || canMerge) }
+      return .init(autoMergeAllowed: autoMergeAllowed, viewerCanEnableAutoMerge: viewerCanEnableAutoMerge == true,
+        viewerCanMerge: canMerge, preferredMethod: method,
+        viewerCanDisableAutoMerge: viewerCanDisableAutoMerge, viewerCanMarkReadyForReview: canMarkReady)
+    }
+  }
   struct LabelConnection: Decodable { let nodes: [Label] }
   struct Label: Decodable { let name: String }
   struct ReviewRequestConnection: Decodable {
@@ -585,6 +663,9 @@ private struct RawPullRequest: Decodable {
   let deletions: Int
   let reviewDecision: String?
   let viewerDidAuthor: Bool?
+  let viewerCanEnableAutoMerge: Bool?
+  let viewerCanDisableAutoMerge: Bool?
+  let viewerCanUpdate: Bool?
   let mergeable: String?
   let mergeStateStatus: String?
   let autoMergeRequest: AutoMergeRequest?
@@ -682,7 +763,11 @@ private struct RawPullRequest: Decodable {
       mergeQueuePosition: mergeQueueEntry?.position,
       lifecycleState: lifecycleState, viewerReviewRequested: viewerReviewRequested,
       reviewRequestHistoryComplete: timelineItems.totalCount.map { $0 <= timelineItems.nodes.count },
-      checkDetailsComplete: rollup?.contexts?.totalCount.map { $0 <= (rollup?.contexts?.nodes.count ?? 0) }
+      checkDetailsComplete: rollup?.contexts?.totalCount.map { $0 <= (rollup?.contexts?.nodes.count ?? 0) },
+      mergeCapabilities: repository.mergeCapabilities(viewerCanEnableAutoMerge: viewerCanEnableAutoMerge,
+        viewerCanDisableAutoMerge: viewerCanDisableAutoMerge, viewerCanUpdate: viewerCanUpdate,
+        viewerDidAuthor: viewerDidAuthor),
+      isMergeable: mergeable == "MERGEABLE" ? true : mergeable == "CONFLICTING" ? false : nil
     )
   }
 }
@@ -703,4 +788,23 @@ private struct ReviewThreadsResponse: Decodable {
   struct Failure: Decodable { let message: String }
   let data: GraphData?
   let errors: [Failure]?
+}
+
+private struct MergeActionResponse: Decodable {
+  struct GraphData: Decodable {
+    struct Result: Decodable {
+      struct PullRequestState: Decodable {
+        struct AutoMerge: Decodable { let enabledAt: String }
+        let id: String
+        let state: String
+        let merged: Bool
+        let isDraft: Bool
+        let autoMergeRequest: AutoMerge?
+      }
+      let pullRequest: PullRequestState?
+    }
+    let result: Result?
+  }
+  let data: GraphData?
+  let errors: [GraphError]?
 }

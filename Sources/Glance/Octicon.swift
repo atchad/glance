@@ -3,6 +3,8 @@ import SwiftUI
 
 enum Octicon: String, CaseIterable {
   case pullRequest = "git-pull-request-16"
+  case merged = "git-merge-16"
+  case closed = "git-pull-request-closed-16"
   case draft = "git-pull-request-draft-16"
   case stack = "stack-16"
   case approved = "check-circle-fill-16"
@@ -35,6 +37,8 @@ enum Octicon: String, CaseIterable {
   var name: String {
     switch self {
     case .pullRequest: "Pull requests"
+    case .merged: "Merge pull request"
+    case .closed: "Closed pull request"
     case .draft: "Draft"
     case .stack: "Stacked pull request"
     case .approved: "Approved"

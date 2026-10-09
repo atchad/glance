@@ -39,6 +39,8 @@ final class AppStore: ObservableObject {
   @Published private(set) var isLoadingRepositories = false
   @Published private(set) var repositoryLoadError: String?
   @Published private(set) var linkOpeningErrorMessage: String?
+  @Published private(set) var mergingPullRequestIDs: Set<String> = []
+  @Published private(set) var mergeActionErrors: [String: String] = [:]
   @Published var preferences: Preferences {
     didSet {
       guard !isLoadingStorage,
@@ -78,6 +80,7 @@ final class AppStore: ObservableObject {
   })
   private var pullRequestBrowser: PullRequestBrowser?
   private let externalLinkOpener: ExternalLinkOpener
+  private let mergeAction: (PullRequestMergeAction, PullRequest) async throws -> PullRequestMergeResult
   private var linkOpenGeneration = 0
   private let fetchSnapshots: ([PRSection]) async throws -> (
     viewer: String, snapshots: [SectionSnapshot]
@@ -96,12 +99,16 @@ final class AppStore: ObservableObject {
     externalLinkOpener: ExternalLinkOpener? = nil,
     fetchSnapshots: @escaping ([PRSection]) async throws -> (
       viewer: String, snapshots: [SectionSnapshot]
-    ) = { try await GitHubClient().fetchAll(sections: $0) }
+    ) = { try await GitHubClient().fetchAll(sections: $0) },
+    performMergeAction: @escaping (PullRequestMergeAction, PullRequest) async throws -> PullRequestMergeResult = {
+      try await GitHubClient().performMergeAction($0, on: $1)
+    }
   ) {
     let directory = storageDirectory ?? Self.supportDirectory
     preferencesURL = directory.appending(path: "preferences.json")
     cacheURL = directory.appending(path: "cache.json")
     self.fetchSnapshots = fetchSnapshots
+    mergeAction = performMergeAction
     self.externalLinkOpener = externalLinkOpener ?? ExternalLinkOpener()
     self.dismissalUndoDuration =
       dismissalUndoDuration.isFinite && dismissalUndoDuration > 0 ? dismissalUndoDuration : 5
@@ -253,6 +260,49 @@ final class AppStore: ObservableObject {
     isLoadingRepositories = false
   }
 
+  func performMergeAction(for pullRequest: PullRequest) async {
+    guard !mergingPullRequestIDs.contains(pullRequest.id),
+      let current = snapshots.values.lazy.flatMap({ $0 }).first(where: { $0.id == pullRequest.id }),
+      let action = PullRequestMergeControl(pullRequest: current).action else { return }
+    // Never reinterpret a stale icon click as another action, or merge a newer revision.
+    guard action == PullRequestMergeControl(pullRequest: pullRequest).action,
+      !action.requiresExpectedHead || current.headRefOID == pullRequest.headRefOID else {
+      mergeActionErrors[pullRequest.id] = "Pull request changed. Refresh before trying again."
+      return
+    }
+    if let deadline = refreshBlockedUntil, deadline > Date() {
+      mergeActionErrors[pullRequest.id] = GitHubError.rateLimited(until: deadline).localizedDescription
+      return
+    }
+    mergingPullRequestIDs.insert(current.id)
+    mergeActionErrors.removeValue(forKey: current.id)
+    defer { mergingPullRequestIDs.remove(current.id) }
+    do {
+      let result = try await mergeAction(action, current)
+      guard result.id == current.id else { throw GitHubError.invalidResponse }
+      // Discard search responses that began before this write succeeded.
+      refreshGeneration &+= 1
+      if isRefreshing { refreshQueued = true }
+      snapshots = snapshots.mapValues { requests in
+        requests.map { pr in
+          guard pr.id == result.id else { return pr }
+          var updated = pr
+          updated.autoMergeEnabled = result.autoMergeEnabled
+          updated.lifecycleState = result.lifecycleState
+          if let isDraft = result.isDraft { updated.isDraft = isDraft }
+          // Publishing a draft can change review/check requirements. Await fresh mergeability.
+          if action == .markReadyForReview { updated.isMergeable = nil }
+          return updated
+        }
+      }
+      saveCache()
+      if action == .markReadyForReview { refresh() }
+    } catch {
+      if case GitHubError.rateLimited(let deadline) = error { refreshBlockedUntil = deadline }
+      mergeActionErrors[current.id] = error.localizedDescription
+    }
+  }
+
   func applyRepositorySelection(_ selected: Set<String>) {
     preferences.excludedRepositories = Self.excludedRepositories(
       all: accessibleRepositories,
@@ -347,6 +397,7 @@ final class AppStore: ObservableObject {
           || result.snapshots.contains(where: { $0.errorMessage == nil })
         if hasSuccessfulSection { hasNotificationBaseline = true }
         let activeIDs = Set(nextSnapshots.values.flatMap { $0.map(\.id) })
+        mergeActionErrors = mergeActionErrors.filter { activeIDs.contains($0.key) }
         let retainedDismissals = preferences.dismissedRevisions.filter {
           activeIDs.contains($0.key)
         }

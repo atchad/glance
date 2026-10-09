@@ -26,6 +26,19 @@ struct PullRequest: Codable, Identifiable, Hashable {
     case open, closed, merged
   }
 
+  enum MergeMethod: String, Codable {
+    case squash, merge, rebase
+  }
+
+  struct MergeCapabilities: Codable, Hashable {
+    var autoMergeAllowed: Bool
+    var viewerCanEnableAutoMerge: Bool
+    var viewerCanMerge: Bool
+    var preferredMethod: MergeMethod?
+    var viewerCanDisableAutoMerge: Bool? = nil
+    var viewerCanMarkReadyForReview: Bool? = nil
+  }
+
   let id: String
   let number: Int
   let repository: String
@@ -38,7 +51,7 @@ struct PullRequest: Codable, Identifiable, Hashable {
   let createdAt: Date
   let reviewRequestedAt: Date?
   let updatedAt: Date
-  let isDraft: Bool
+  var isDraft: Bool
   let reviewDecision: String?
   let checksState: CheckState
   let additions: Int
@@ -56,14 +69,17 @@ struct PullRequest: Codable, Identifiable, Hashable {
   let mergeState: MergeState?
   let unresolvedConversationCount: Int?
   let checks: [Check]?
-  let autoMergeEnabled: Bool?
+  var autoMergeEnabled: Bool?
   let mergeQueuePosition: Int?
-  let lifecycleState: LifecycleState?
+  var lifecycleState: LifecycleState?
 
   // Missing in older caches, whose request dates could belong to another reviewer.
   let viewerReviewRequested: Bool?
   var reviewRequestHistoryComplete: Bool? = nil
   var checkDetailsComplete: Bool? = nil
+  // Older caches lack repository settings and permissions; never assume write access.
+  var mergeCapabilities: MergeCapabilities? = nil
+  var isMergeable: Bool? = nil
 
   var personalReviewRequestedAt: Date? {
     viewerReviewRequested == nil ? nil : reviewRequestedAt
@@ -222,11 +238,11 @@ struct PullRequest: Codable, Identifiable, Hashable {
     return .init(level: .informational, reason: .active, message: "Active", priority: 800)
   }
 
-  // Review requests are implied by the section, drafts get a glyph, and Active carries no news.
+  // Review requests are implied by the section; lifecycle/merge status lives beside the PR number.
   var rowAttention: PRAttentionSummary? {
     let attention = attention
     switch attention.reason {
-    case .reviewRequested, .draft, .active: return nil
+    case .reviewRequested, .draft, .active, .readyToMerge, .autoMerge, .merged, .closed: return nil
     default: return attention
     }
   }

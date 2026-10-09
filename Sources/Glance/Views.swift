@@ -23,6 +23,9 @@ struct DashboardView: View {
       Divider()
       if let message = store.storageErrorMessage { errorBanner(message) }
       if let message = store.linkOpeningErrorMessage { errorBanner(message) }
+      ForEach(store.mergeActionErrors.keys.sorted(), id: \.self) { id in
+        if let message = store.mergeActionErrors[id] { errorBanner(message) }
+      }
       if let message = keys.errorMessage ?? keys.registrationError { errorBanner(message) }
       if store.errorMessage != nil, store.snapshots.isEmpty {
         if store.connectionIssue == .authentication {
@@ -217,7 +220,10 @@ struct DashboardView: View {
               checksAreCached: store.isShowingCachedData || store.errorMessage != nil
                 || store.sectionErrors[section.id] != nil
                 || store.lastUpdated.map { Date().timeIntervalSince($0) > store.preferences.refreshInterval } != false,
-              openLink: { store.openLink($0) }
+              openLink: { store.openLink($0) },
+              isMerging: store.mergingPullRequestIDs.contains(pullRequest.id),
+              mergeError: store.mergeActionErrors[pullRequest.id],
+              merge: { Task { await store.performMergeAction(for: pullRequest) } }
             )
             .id(rowID(section, pullRequest))
             if pullRequest.id != items.last?.id {
@@ -613,6 +619,9 @@ struct PullRequestRow: View {
   @Binding var isShowingDetails: Bool
   let checksAreCached: Bool
   var openLink: ((URL) -> Void)? = nil
+  var isMerging = false
+  var mergeError: String? = nil
+  var merge: () -> Void = {}
   @State private var detailFocusRequest = 0
   @State private var hovering = false
 
@@ -642,6 +651,19 @@ struct PullRequestRow: View {
       }
       .onChange(of: isShowingDetails) { _, showing in
         if !showing { detailFocusRequest += 1 }
+      }
+    }
+    .overlayPreferenceValue(MergeControlBoundsKey.self) { anchor in
+      GeometryReader { geometry in
+        if let anchor {
+          let bounds = geometry[anchor]
+          PullRequestMergeButton(pullRequest: pullRequest, isBusy: isMerging, error: mergeError) {
+            select()
+            merge()
+          }
+          .frame(width: bounds.width, height: bounds.height)
+          .position(x: bounds.midX, y: bounds.midY)
+        }
       }
     }
   }
@@ -737,13 +759,13 @@ struct PullRequestRow: View {
       RepositoryNameLabel(repository: pullRequest.repository,
         color: preferences.repositoryColor(for: pullRequest.repository), editColor: editRepositoryColor)
         .font(.caption.weight(.medium)).lineLimit(1)
+      // Reserve the identity slot, but keep the interactive control outside the row button.
+      Color.clear.frame(width: 20, height: 17)
+        .anchorPreference(key: MergeControlBoundsKey.self, value: .bounds) { $0 }
+        .accessibilityHidden(true)
       Text(verbatim: "#\(pullRequest.number)").font(.caption.monospacedDigit()).fixedSize()
       if let position = pullRequest.stackPosition, let size = pullRequest.stackSize, size > 1 {
         StackBadge(position: position, size: size).fixedSize()
-      }
-      if pullRequest.isDraft {
-        OcticonImage(icon: .draft, size: 11)
-          .nativeHelp("Draft pull request")
       }
       if isPinned {
         Image(systemName: "pin.fill")
@@ -801,6 +823,13 @@ struct PullRequestRow: View {
     case "REVIEW_REQUIRED": PendingReviewIcon()
     default: Color.clear
     }
+  }
+}
+
+private struct MergeControlBoundsKey: PreferenceKey {
+  static var defaultValue: Anchor<CGRect>? = nil
+  static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+    value = nextValue() ?? value
   }
 }
 

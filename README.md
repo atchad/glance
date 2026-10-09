@@ -100,6 +100,26 @@ Glance starts with sections for pull requests requesting your review and pull re
 Click a pull request to open it in the application selected in Settings → General → Links.
 Its context menu can also copy the URL or branch name.
 
+### Merge controls
+
+The icon beside each PR number combines merge status and actions:
+
+- **Gray PR icon:** auto-merge is off. Click to enable it when GitHub allows it.
+- **Draft PR icon:** click to mark the PR ready for review when you are its author or have write access.
+- **Green PR icon:** auto-merge is enabled. Click to disable it and return the icon to gray.
+- **Green merge icon:** GitHub reports the PR is ready to merge. Click to merge immediately.
+- **Purple merge icon:** the PR has merged; the icon is no longer actionable.
+
+When the repository disables auto-merge, hovering shows **“Auto-merge disabled in this repo”**.
+Drafts and closed PRs retain their own icons and cannot be merged directly from Glance. Publishing
+a draft refreshes its review/check requirements before offering a merge action. Actions require
+the GitHub CLI account's permissions and respect GitHub's branch protection rules. The tooltip
+shows the merge method: squash when allowed, otherwise merge commit, then rebase. Enabling
+auto-merge and merging immediately are rejected if new commits were pushed after the displayed
+PR revision; disabling auto-merge uses GitHub's separate disable permission. Requests disable the
+button while running; errors appear in the dashboard and on hover without changing the status.
+Merged PRs remain purple while listed; an open-only section removes them on its next refresh.
+
 ### Choose where links open
 
 The **Open links with** dropdown offers Default browser, Glance, applications recommended

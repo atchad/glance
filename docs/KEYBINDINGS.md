@@ -43,6 +43,13 @@ PR commands use the selected, visible row. The Snoozed section defaults to colla
 
 After a prefix such as `c`, Glance shows the available next keys. The default timeout is three seconds. Escape cancels. An invalid continuation cancels without running a different action. Focus changes, clicks, selection-list changes, and config reloads also cancel. Holding a key repeats only next/previous navigation, not PR actions.
 
+## PR browser windows
+
+Dashboard bindings do not capture typing inside a GitHub page. PR windows use Command–W
+to hide their retained page and Command–R to request a reload, with a warning about losing
+unfinished work. The dashboard's `r` refresh only updates Glance's queue metadata; it does
+not reload browser pages. Browser window shortcuts are not part of `keybindings.json`.
+
 ## Settings and the config file
 
 Open **Settings → Keyboard** to search actions, edit or record bindings, disable them, change the timeout, reveal the file, or reset defaults. Recording temporarily disables the global hotkey so it can be recorded safely.

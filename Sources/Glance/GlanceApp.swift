@@ -37,6 +37,7 @@ struct GlanceApp: App {
     _commands = StateObject(wrappedValue: commands)
     DispatchQueue.main.async {
       NSApp.setActivationPolicy(.accessory)
+      store.enablePullRequestBrowser()
       store.configureLoginItemAtLaunch()
       store.start()
       if store.preferences.openPanelAtLaunch { panel.show() }

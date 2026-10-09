@@ -38,6 +38,7 @@ final class AppStore: ObservableObject {
   @Published private(set) var accessibleRepositories: [String] = []
   @Published private(set) var isLoadingRepositories = false
   @Published private(set) var repositoryLoadError: String?
+  @Published private(set) var linkOpeningErrorMessage: String?
   @Published var preferences: Preferences {
     didSet {
       guard !isLoadingStorage,
@@ -57,6 +58,10 @@ final class AppStore: ObservableObject {
         if lastUpdated != nil { saveCache() }
       }
       savePreferences()
+      if oldValue.linkOpening != preferences.linkOpening {
+        linkOpenGeneration += 1
+        linkOpeningErrorMessage = nil
+      }
       if oldValue.appearanceMode != preferences.appearanceMode {
         Self.applyAppearance(preferences.appearanceMode)
       }
@@ -68,7 +73,12 @@ final class AppStore: ObservableObject {
   }
 
   private let client = GitHubClient()
-  private lazy var notificationManager = NotificationManager()
+  private lazy var notificationManager = NotificationManager(openURL: { [weak self] url in
+    self?.openNotificationURL(url)
+  })
+  private var pullRequestBrowser: PullRequestBrowser?
+  private let externalLinkOpener: ExternalLinkOpener
+  private var linkOpenGeneration = 0
   private let fetchSnapshots: ([PRSection]) async throws -> (
     viewer: String, snapshots: [SectionSnapshot]
   )
@@ -83,6 +93,7 @@ final class AppStore: ObservableObject {
   init(
     storageDirectory: URL? = nil,
     dismissalUndoDuration: TimeInterval = 5,
+    externalLinkOpener: ExternalLinkOpener? = nil,
     fetchSnapshots: @escaping ([PRSection]) async throws -> (
       viewer: String, snapshots: [SectionSnapshot]
     ) = { try await GitHubClient().fetchAll(sections: $0) }
@@ -91,6 +102,7 @@ final class AppStore: ObservableObject {
     preferencesURL = directory.appending(path: "preferences.json")
     cacheURL = directory.appending(path: "cache.json")
     self.fetchSnapshots = fetchSnapshots
+    self.externalLinkOpener = externalLinkOpener ?? ExternalLinkOpener()
     self.dismissalUndoDuration =
       dismissalUndoDuration.isFinite && dismissalUndoDuration > 0 ? dismissalUndoDuration : 5
     preferences = .default
@@ -425,7 +437,63 @@ final class AppStore: ObservableObject {
     preferences.sections[index].isCollapsed.toggle()
   }
 
-  func open(_ pullRequest: PullRequest) { NSWorkspace.shared.open(pullRequest.url) }
+  /// Window-local filters (search and collapsed sections) do not destroy browser pages.
+  var browserPullRequests: [PullRequest] {
+    var seen: Set<String> = []
+    let listed = preferences.sections.flatMap { pullRequests(in: $0) }
+      + snoozedPullRequests.filter { !preferences.excludedRepositories.contains($0.repository) }
+    return listed
+      .filter { seen.insert($0.id).inserted }
+  }
+
+  func enablePullRequestBrowser(_ browser: PullRequestBrowser? = nil) {
+    guard pullRequestBrowser == nil else { return }
+    let browser = browser ?? PullRequestBrowser()
+    pullRequestBrowser = browser
+    browser.bind(to: self)
+  }
+
+  func open(_ pullRequest: PullRequest) {
+    openLink(pullRequest.url, pullRequest: pullRequest)
+  }
+
+  private func openNotificationURL(_ url: URL) {
+    openLink(url)
+  }
+
+  func openLink(_ url: URL, pullRequest: PullRequest? = nil) {
+    linkOpenGeneration += 1
+    let generation = linkOpenGeneration
+    linkOpeningErrorMessage = nil
+    let preference = preferences.linkOpening
+    if preference == .glance, url.scheme?.lowercased() == "https" {
+      enablePullRequestBrowser()
+      if let pr = pullRequest ?? browserPullRequests.first(where: { $0.url == url }) {
+        pullRequestBrowser?.open(pr)
+      } else { pullRequestBrowser?.openLink(url) }
+    } else {
+      Task { [weak self] in
+        guard let self else { return }
+        let warning = await externalLinkOpener.open(url, preference: preference)
+        if generation == linkOpenGeneration { linkOpeningErrorMessage = warning }
+      }
+    }
+  }
+
+  var githubWebSession: GitHubWebSession {
+    enablePullRequestBrowser()
+    return pullRequestBrowser!.webSession
+  }
+
+  func showGitHubWebLogin() {
+    guard preferences.linkOpening == .glance else { return }
+    enablePullRequestBrowser()
+    pullRequestBrowser?.showSignIn()
+  }
+
+  func logOutOfGitHubWebSession() async {
+    await pullRequestBrowser?.signOut()
+  }
 
   func dismiss(_ pullRequest: PullRequest) {
     dismissalUndoTask?.cancel()

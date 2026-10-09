@@ -148,6 +148,7 @@ private struct GeneralSettingsPage: View {
         }
         .help("Use the system appearance, or always use light or dark mode in Glance.")
       }
+      LinkOpeningSettingsView(store: store, session: store.githubWebSession)
       Section {
         Toggle(
           "Keep the panel above other windows",
@@ -300,7 +301,7 @@ private struct GitHubSettingsPage: View {
           "GitHub account", value: store.viewerLogin.map { "@\($0)" } ?? "Not connected")
         LabeledContent("Authentication") {
           HStack {
-            Link("GitHub CLI Setup…", destination: URL(string: "https://cli.github.com/")!)
+            Button("GitHub CLI Setup…") { store.openLink(URL(string: "https://cli.github.com/")!) }
             Button("Check Connection") { commands.perform(.refresh) }
           }
           .accessibilityElement(children: .contain)

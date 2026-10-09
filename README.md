@@ -8,7 +8,7 @@
   A native macOS pull-request HUD for the work that needs your attention.
 </p>
 
-Glance keeps your GitHub pull requests one click away in the menu bar. Click its icon or use the global hotkey to open the same resizable, always-on-top panel while you work.
+Glance keeps your GitHub pull requests one click away in the menu bar. Click its icon to open a translucent pull-request popover, or use the global hotkey to open a resizable, always-on-top panel while you work.
 Click outside the panel to hide it; its details popovers remain part of the panel.
 By default, Glance also appears in the Dock and Command–Tab switcher, which bring its open windows forward.
 Clicking the Dock icon opens the panel when no Glance window is visible.
@@ -88,7 +88,7 @@ Glance starts with sections for pull requests requesting your review and pull re
 - Show or hide the Dock icon in Settings → General → Appearance. The change applies without
   restarting and persists across launches. Hiding it also removes Glance from Command–Tab;
   the menu-bar icon and global shortcut remain available.
-- Drag the panel’s edges or corners to resize it. The menu-bar icon and global hotkey open the same native window, and Glance remembers its size and position across launches.
+- Drag the panel’s edges or corners to resize it. The global hotkey and the popover’s “Show floating panel” button open this window, and Glance remembers its size and position across launches.
 - Choose which pull-request transitions generate notifications and configure a global panel shortcut.
 - Adjust row details, including optional additions and deletions, review and check status icons,
   and completed-review filtering. Each row shows the time elapsed since the PR was created or

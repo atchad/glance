@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import SwiftUI
 
 @MainActor
 final class StatusItemController: NSObject, ObservableObject {
@@ -8,19 +9,35 @@ final class StatusItemController: NSObject, ObservableObject {
   private let commands: ApplicationCommands
   private let panel: FloatingPanelController
   private let statusItem: NSStatusItem
+  private let popover: NSPopover
+  var isPopoverShown: Bool { popover.isShown }
   private var cancellables: Set<AnyCancellable> = []
 
   init(
     store: AppStore, keys: KeybindingStore, commands: ApplicationCommands,
     panel: FloatingPanelController,
-    statusItem: NSStatusItem? = nil
+    statusItem: NSStatusItem? = nil, popover: NSPopover = NSPopover()
   ) {
     self.store = store
     self.keys = keys
     self.commands = commands
     self.panel = panel
     self.statusItem = statusItem ?? NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    self.popover = popover
     super.init()
+
+    popover.behavior = .transient
+    popover.contentViewController = NSHostingController(
+      rootView: DashboardView(store: store, keys: keys, commands: commands,
+        isMenuBar: true, close: { [weak self] in self?.popover.close() }))
+    // Hosting attachment can replace the content size; set it afterwards.
+    popover.contentSize = NSSize(width: 390, height: 590)
+    popover.contentViewController?.view.setFrameSize(popover.contentSize)
+    // Showing the floating panel from the hotkey also dismisses the menu-bar surface.
+    panel.objectWillChange.sink { [weak self] in
+      guard let self, self.panel.isVisible else { return }
+      self.popover.close()
+    }.store(in: &cancellables)
 
     if let button = self.statusItem.button {
       button.image = Octicon.pullRequest.image
@@ -46,11 +63,18 @@ final class StatusItemController: NSObject, ObservableObject {
     if NSApp.currentEvent?.type == .rightMouseDown {
       showContextMenu(from: sender)
     } else {
-      commands.perform(panel.isVisible ? .hidePanel : .showPanel)
+      if popover.isShown {
+        popover.close()
+      } else {
+        panel.hide()
+        popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
+        popover.contentViewController?.view.window?.makeKey()
+      }
     }
   }
 
   private func showContextMenu(from button: NSStatusBarButton) {
+    popover.close()
     let menu = NSMenu()
     addMenuItem(.settings, selector: #selector(openSettings), to: menu)
     addMenuItem(.checkForUpdates, selector: #selector(checkForUpdates), to: menu)
@@ -72,7 +96,7 @@ final class StatusItemController: NSObject, ObservableObject {
     guard let button = statusItem.button else { return }
     button.image = Octicon.pullRequest.image
     button.setAccessibilityLabel("Glance pull requests")
-    button.setAccessibilityHelp("Show or hide the resizable pull request panel")
+    button.setAccessibilityHelp("Show or hide the pull request menu")
     button.setAccessibilityValue(Self.accessibilityValue(
       count: store.menuBarCount, mode: store.preferences.menuBarCountMode,
       isRefreshing: store.isRefreshing, lastUpdated: store.lastUpdated,

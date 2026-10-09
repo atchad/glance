@@ -5,6 +5,7 @@ struct DashboardView: View {
   @ObservedObject var store: AppStore
   @ObservedObject var keys: KeybindingStore
   let commands: ApplicationCommands
+  var isMenuBar = false
   var close: (() -> Void)?
   @State private var searchText = ""
   @State private var snoozedIsCollapsed = true
@@ -59,7 +60,7 @@ struct DashboardView: View {
       footer
     }
     .frame(
-      minWidth: 310, idealWidth: 410, minHeight: 320, idealHeight: 590
+      minWidth: 310, idealWidth: isMenuBar ? 390 : 410, minHeight: 320, idealHeight: 590
     )
     .background(.regularMaterial)
     .background {
@@ -92,9 +93,11 @@ struct DashboardView: View {
       }
     }
     .overlay(alignment: .bottomTrailing) {
-      ResizeGrip()
-        .padding(5)
-        .allowsHitTesting(false)
+      if !isMenuBar {
+        ResizeGrip()
+          .padding(5)
+          .allowsHitTesting(false)
+      }
     }
     .task { store.start() }
   }
@@ -137,6 +140,14 @@ struct DashboardView: View {
         }
       }
       Spacer()
+      if isMenuBar {
+        Button { perform(.showPanel) } label: {
+          Image(systemName: "rectangle.arrowtriangle.2.outward")
+        }
+        .buttonStyle(.borderless)
+        .nativeHelp(keys.help(for: .showPanel))
+        .accessibilityLabel("Show floating panel")
+      }
       Button {
         perform(.refresh)
       } label: {
@@ -194,6 +205,7 @@ struct DashboardView: View {
               perform: { perform($0, target: target(for: pullRequest, section: section)) },
               editRepositoryColor: {
                 detailRowID = nil
+                close?()
                 commands.showRepositoryColors(for: pullRequest.repository)
               },
               isPinned: store.preferences.pinnedPullRequests.contains(pullRequest.id),
@@ -333,7 +345,7 @@ struct DashboardView: View {
       showDetails: pr == nil || section == nil ? nil : {
         if let pr, let section { detailRowID = rowID(section, pr) }
       },
-      close: close)
+      close: close, didOpen: isMenuBar ? close : nil)
   }
 
   private func perform(_ action: GlanceAction, target: CommandTarget? = nil) {

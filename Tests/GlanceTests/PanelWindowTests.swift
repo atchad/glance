@@ -26,7 +26,7 @@ final class PanelWindowTests: XCTestCase {
   }
 
   @MainActor
-  func testMenuBarUsesResizablePanelAndRestoresFrame() throws {
+  func testMenuBarUsesPopoverAndFloatingPanelRestoresFrame() throws {
     // SwiftPM's xctest process is not an application bundle. Dashboard startup
     // initializes UserNotifications, which requires one; the CI app runner below
     // executes these same checks without that limitation.

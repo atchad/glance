@@ -10,7 +10,10 @@ The default is **Control–Shift–Space**:
 - If the panel is visible but does not have focus, focus it.
 - If the panel already has focus, hide it.
 
-Clicking outside the dashboard hides it. Its details popovers and sheets keep the dashboard open. Switching to another app also hides it; returning to Glance does not automatically reopen the panel.
+Clicking outside the dashboard hides it. Its details popovers and sheets keep the dashboard open. Switching to another app also hides it. Returning with Command–Tab does not reopen the panel; clicking Glance in the Dock does when no other Glance window is visible.
+
+Settings → General → Appearance → Show Dock icon controls Dock and Command–Tab visibility.
+Turning it off takes effect without restarting and does not disable the global hotkey.
 
 This uses macOS hotkey registration, not a global event tap. It does not need Accessibility permission. If registration fails, Keyboard settings shows an error. Glance cannot detect every shortcut reserved by macOS or another app.
 

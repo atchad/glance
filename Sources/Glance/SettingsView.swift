@@ -140,13 +140,15 @@ private struct GeneralSettingsPage: View {
       } header: {
         Text("Startup")
       } footer: {
-        Text("Glance stays in the menu bar unless you choose to open the panel.")
+        Text("Glance stays in the menu bar. Opening the panel at startup is optional.")
       }
       Section("Appearance") {
         Picker("Appearance", selection: $store.preferences.appearanceMode) {
           ForEach(AppearanceMode.allCases) { mode in Text(mode.title).tag(mode) }
         }
         .help("Use the system appearance, or always use light or dark mode in Glance.")
+        Toggle("Show Dock icon", isOn: $store.preferences.showDockIcon)
+          .help("Show Glance in the Dock and Command–Tab switcher. When hidden, use the menu-bar icon or global shortcut.")
       }
       LinkOpeningSettingsView(store: store, session: store.githubWebSession)
       Section {

@@ -12,60 +12,108 @@ struct KeyboardSettingsPage: View {
   @State private var editing: BindingEditorTarget?
   @State private var confirmReset = false
 
+  private let groups: [(String, [GlanceAction])] = [
+    ("Navigation", [.nextPR, .previousPR, .firstPR, .lastPR, .search, .clearSearch]),
+    ("Pull requests", [.openPR, .details, .dismiss, .undoDismissal, .pin, .copyTitle, .copyURL, .copyBranch]),
+    ("Snoozing", [.snoozeHour, .snoozeTomorrow, .snoozeWeek, .snoozeChanges, .snoozeChecks, .wake]),
+    ("Sections", [.toggleSection, .collapseAll, .expandAll]),
+    ("Glance", [.refresh, .showPanel, .hidePanel, .togglePanelLevel, .settings, .checkForUpdates, .quit]),
+  ]
+
+  private func matches(_ action: GlanceAction) -> Bool {
+    search.isEmpty || action.title.localizedCaseInsensitiveContains(search)
+      || action.rawValue.localizedCaseInsensitiveContains(search)
+      || keys.label(for: action).localizedCaseInsensitiveContains(search)
+  }
+
   var body: some View {
     VStack(spacing: 0) {
-      Form {
-        Section("Global hotkey") {
-          HStack {
-            VStack(alignment: .leading, spacing: 3) {
-              Text("Show or hide Glance")
-              Text("Show and focus the panel. Hide it only when it already has focus.")
-                .font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            Text(keys.resolved.globalHotkey?.display ?? "Off").font(.body.monospaced())
+      SettingsForm {
+        SettingsGroup {
+          LabeledContent("Show or hide Glance") {
+            Text(keys.resolved.globalHotkey?.display ?? "Off")
+              .font(.body.monospaced())
             Button("Edit…") { editing = .global }
+              .accessibilityLabel("Edit global shortcut")
+          }
+          .accessibilityElement(children: .contain)
+        } header: {
+          Text("Global shortcut")
+        } footer: {
+          SettingsDescription("Show Glance from any app. Press again to hide it when it has focus.")
+        }
+        ForEach(groups, id: \.0) { title, actions in
+          let filtered = actions.filter(matches)
+          if !filtered.isEmpty {
+            SettingsGroup {
+              ForEach(filtered) { action in
+                LabeledContent(action.title) {
+                  Button { editing = .action(action) } label: {
+                    Text(keys.label(for: action).isEmpty ? "Add shortcut" : keys.label(for: action))
+                      .font(.body.monospaced()).foregroundStyle(.secondary)
+                      .multilineTextAlignment(.trailing)
+                      .frame(minWidth: 64, alignment: .trailing)
+                      .contentShape(Rectangle())
+                  }
+                  .buttonStyle(.plain)
+                  .help("Edit shortcut")
+                  .accessibilityValue(keys.label(for: action).isEmpty ? "Unbound" : keys.label(for: action))
+                  .accessibilityLabel("Edit keys for \(action.title)")
+                }
+                .accessibilityElement(children: .contain)
+              }
+            } header: {
+              VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                if title == "Navigation" {
+                  SettingsDescription("Click a shortcut to edit it. Applies while Glance has focus.")
+                }
+              }
+            }
+            .compactRows()
           }
         }
-        Section("Sequences") {
+        if !GlanceAction.allCases.contains(where: matches) {
+          SettingsGroup { Text("No shortcuts found").foregroundStyle(.secondary) }
+        }
+        SettingsGroup {
           Stepper(value: Binding(get: { keys.resolved.configuration.sequenceTimeout },
             set: { value in keys.edit { $0.sequenceTimeout = value } }), in: 0.5...30, step: 0.5) {
-            LabeledContent("Timeout", value: "\(keys.resolved.configuration.sequenceTimeout.formatted()) seconds")
+            HStack {
+              Text("Time between keys")
+              Spacer()
+              Text("\(keys.resolved.configuration.sequenceTimeout.formatted()) seconds")
+                .monospacedDigit().foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
           }
-          Text("No leader key. Press a bound key when the dashboard has focus. Prefixes show the next keys. Escape cancels. Text fields and native controls keep their keys.")
-            .font(.caption).foregroundStyle(.secondary)
+          .accessibilityLabel("Time between keys")
+        } header: {
+          HStack {
+            Text("Key sequences")
+            SettingsHelpButton(title: "Key sequences",
+              message: "Press a bound key while the dashboard has focus; no leader key is needed. A prefix shows the next available keys. Escape cancels the sequence. Text fields and native controls keep their usual keys. The timeout controls how long you can pause between sequence keys.")
+          }
         }
         if let error = keys.errorMessage ?? keys.registrationError {
-          Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.orange).textSelection(.enabled) }
+          SettingsGroup { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.orange).textSelection(.enabled) }
         }
       }
-      .formStyle(.grouped)
-      TextField("Find an action or key", text: $search)
-        .textFieldStyle(.roundedBorder).padding(.horizontal, 16).padding(.bottom, 8)
-      List(GlanceAction.allCases.filter {
-        search.isEmpty || $0.title.localizedCaseInsensitiveContains(search)
-          || $0.rawValue.localizedCaseInsensitiveContains(search) || keys.label(for: $0).localizedCaseInsensitiveContains(search)
-      }) { action in
-        HStack {
-          VStack(alignment: .leading, spacing: 2) {
-            Text(action.title)
-            Text(action.rawValue).font(.caption).foregroundStyle(.secondary)
-          }
-          Spacer()
-          Text(keys.label(for: action).isEmpty ? "Unbound" : keys.label(for: action))
-            .font(.caption.monospaced()).foregroundStyle(.secondary)
-          Button("Edit…") { editing = .action(action) }
-            .accessibilityLabel("Edit keys for \(action.title)")
+      .toolbar {
+        ToolbarItem(placement: .automatic) {
+          SettingsSearchField(text: $search)
+            .frame(width: 180)
         }
-        .padding(.vertical, 3)
       }
-      .listStyle(.inset)
       Divider()
       HStack {
-        Button("Reveal config file") { keys.revealFile() }
-        Button("Reload") { keys.reload() }
+        Menu("Advanced") {
+          Button("Reveal Configuration File") { keys.revealFile() }
+          Button("Reload Configuration") { keys.reload() }
+        }
+        .fixedSize()
         Spacer()
-        Button("Reset all…") { confirmReset = true }
+        Button("Reset All…") { confirmReset = true }
       }.padding(16)
     }
     .sheet(item: $editing) { target in BindingEditor(keys: keys, target: target) }
@@ -102,9 +150,11 @@ private struct BindingEditor: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
-      Text(title).font(.headline)
-      Text("Separate alternative bindings with a semicolon. Separate sequence keys with a space. Use ctrl, alt, shift, and cmd for modifiers.")
-        .font(.callout).foregroundStyle(.secondary)
+      HStack {
+        Text(title).font(.headline)
+        SettingsHelpButton(title: "Shortcut format",
+          message: "Separate alternative shortcuts with a semicolon (c u; cmd+shift+u). Separate sequence keys with a space (c u). Use ctrl, alt, shift, and cmd for modifiers. You can also record keys instead of typing them.")
+      }
       TextField("For example: c u; cmd+shift+u", text: $text)
         .textFieldStyle(.roundedBorder).font(.body.monospaced()).disabled(recording)
       HStack {
@@ -141,7 +191,9 @@ private struct BindingEditor: View {
         Button("Disable") { text = "" }.disabled(recording)
         Spacer()
         Button("Cancel") { stopRecording(); dismiss() }
+          .keyboardShortcut(.cancelAction)
         Button("Save") { save() }.disabled(recording)
+          .keyboardShortcut(.defaultAction)
       }
     }
     .padding(24).frame(width: 540)

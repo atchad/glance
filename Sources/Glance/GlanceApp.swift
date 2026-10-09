@@ -47,9 +47,10 @@ struct GlanceApp: App {
   }
 
   var body: some Scene {
-    Settings {
-      GlanceSettingsView(store: store, panel: panel, updates: updates, keys: keys, commands: commands,
-        navigation: settingsWindow.navigation)
+    // AppKit owns the status item and Settings window. Keep SwiftUI's scene and
+    // command lifecycle without an automatically created second Settings window.
+    MenuBarExtra("Glance", systemImage: "tray", isInserted: .constant(false)) {
+      EmptyView()
     }
     .commands {
       CommandGroup(replacing: .appSettings) {

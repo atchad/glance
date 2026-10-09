@@ -21,7 +21,10 @@ final class GlanceAppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-    guard !hasVisibleWindows, let commands else { return true }
-    return !commands.perform(.showPanel)
+    guard let commands else { return true }
+    if !hasVisibleWindows { return !commands.perform(.showPanel) }
+    // Let the existing window handle activation rather than asking SwiftUI to
+    // create a scene for the reopen event.
+    return false
   }
 }

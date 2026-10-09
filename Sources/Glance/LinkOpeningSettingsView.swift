@@ -8,10 +8,10 @@ struct LinkOpeningSettingsView: View {
   @State private var confirmingLogOut = false
 
   var body: some View {
-    Section {
+    SettingsGroup {
       LabeledContent("Open links with") {
         LinkApplicationPicker(selection: $store.preferences.linkOpening, applications: applications)
-          .frame(width: 240)
+          .fixedSize(horizontal: true, vertical: false)
       }
       if store.preferences.linkOpening == .glance {
         LabeledContent("GitHub website") {
@@ -35,12 +35,11 @@ struct LinkOpeningSettingsView: View {
           .font(.caption).foregroundStyle(.orange)
       }
     } header: {
-      Text("Links")
-    } footer: {
-      if store.preferences.linkOpening == .glance {
-        Text("Glance preloads PR pages and retains them when you close their windows. Sign in here using the same GitHub account as the CLI. This website session is separate from GitHub CLI and your other browsers; a stored session may expire or be revoked.")
-      } else {
-        Text("PRs, check links, and notification links open in this application. New Glance preloads are disabled; already-opened pages keep their live state until their PR leaves the dashboard or you quit.")
+      HStack {
+        Text("Links")
+        SettingsHelpButton(title: "Opening links", message: store.preferences.linkOpening == .glance
+          ? "Glance keeps pull request pages open in the background so you can return to your place. Sign in with the same GitHub account as the CLI. This website session is separate from GitHub CLI and your other browsers."
+          : "Pull requests, checks, and notification links open in your chosen application. Glance stops preloading new pages. Existing Glance pages stay open until their pull request leaves the dashboard or you quit.")
       }
     }
     .onAppear {
@@ -69,6 +68,8 @@ struct LinkApplicationPicker: NSViewRepresentable {
 
   func makeNSView(context: Context) -> NSPopUpButton {
     let button = NSPopUpButton(frame: .zero, pullsDown: false)
+    button.alignment = .right
+    button.isBordered = false
     button.target = context.coordinator
     button.action = #selector(Coordinator.selected(_:))
     button.setAccessibilityLabel("Open links with")
@@ -79,6 +80,16 @@ struct LinkApplicationPicker: NSViewRepresentable {
     context.coordinator.selection = $selection
     context.coordinator.chooseApplication = chooseApplication
     context.coordinator.update(button, applications: applications, selection: selection)
+  }
+
+  func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSPopUpButton, context: Context) -> NSSize? {
+    // AppKit's default intrinsic width accommodates the longest menu item, even
+    // when a short application name is selected. Size the displayed value instead.
+    let item = nsView.selectedItem
+    let font = nsView.font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
+    let titleWidth = ((item?.title ?? "") as NSString).size(withAttributes: [.font: font]).width
+    let imageWidth: CGFloat = item?.image == nil ? 0 : 22
+    return NSSize(width: ceil(titleWidth + imageWidth + 32), height: nsView.intrinsicContentSize.height)
   }
 
   @MainActor

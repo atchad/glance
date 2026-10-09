@@ -4,11 +4,11 @@ import XCTest
 
 @MainActor
 final class DockIconTests: XCTestCase {
-  func testNewAndOlderProfilesShowDockIconByDefault() throws {
-    XCTAssertTrue(Preferences().showDockIcon)
+  func testNewAndOlderProfilesHideDockIconByDefault() throws {
+    XCTAssertFalse(Preferences().showDockIcon)
     for json in ["{}", "{\"showDockIcon\":null}", "{\"showAuthor\":false}"] {
       let preferences = try JSONDecoder().decode(Preferences.self, from: Data(json.utf8))
-      XCTAssertTrue(preferences.showDockIcon)
+      XCTAssertFalse(preferences.showDockIcon)
       XCTAssertFalse(preferences.recoveredInvalidValues)
     }
   }
@@ -61,16 +61,16 @@ final class DockIconTests: XCTestCase {
       applied.fulfill()
     })
     store.preferences.showAuthor = false
-    store.preferences.showDockIcon = false
-    store.preferences.showDockIcon = false
-    store.preferences.refreshInterval = 30
     store.preferences.showDockIcon = true
+    store.preferences.showDockIcon = true
+    store.preferences.refreshInterval = 30
+    store.preferences.showDockIcon = false
     await fulfillment(of: [applied], timeout: 2)
     withExtendedLifetime(delegate) {
-      XCTAssertEqual(policies, [.regular, .accessory, .regular])
+      XCTAssertEqual(policies, [.accessory, .regular, .accessory])
     }
     let reloaded = AppStore(storageDirectory: directory)
-    XCTAssertTrue(reloaded.preferences.showDockIcon)
+    XCTAssertFalse(reloaded.preferences.showDockIcon)
     XCTAssertFalse(reloaded.preferences.showAuthor)
     XCTAssertEqual(reloaded.preferences.refreshInterval, 30)
   }

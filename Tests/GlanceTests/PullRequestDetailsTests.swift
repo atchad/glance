@@ -20,6 +20,7 @@ final class PullRequestDetailsTests: XCTestCase {
   @MainActor
   func testNativeTriggerActivatesAndLeavesNavigationToKeybindingModule() {
     let trigger = DetailActionButton.Trigger()
+    XCTAssertFalse(trigger.restoresKeyboardFocus)
     var activations = 0
     trigger.performAction = { activations += 1 }
     for code: UInt16 in [36, 76, 49] {
@@ -29,8 +30,21 @@ final class PullRequestDetailsTests: XCTestCase {
       XCTAssertFalse(trigger.handleDetailKey(keyEvent(code: code, characters: characters)))
     }
     XCTAssertEqual(activations, 3)
+    XCTAssertTrue(trigger.restoresKeyboardFocus)
     XCTAssertTrue(trigger.acceptsFirstResponder)
     XCTAssertFalse(trigger.handleDetailKey(keyEvent(code: 0, characters: "a")))
+  }
+
+  @MainActor
+  func testKeyboardFocusRestorationDoesNotLeakIntoLaterPointerPresentation() {
+    let trigger = DetailActionButton.Trigger()
+    trigger.keyDown(with: keyEvent(code: 36))
+    XCTAssertTrue(trigger.consumeKeyboardFocusRestoration())
+    // A subsequent pointer/context-menu activation must not reuse the keyboard request.
+    trigger.activate()
+    XCTAssertFalse(trigger.consumeKeyboardFocusRestoration())
+    trigger.keyDown(with: keyEvent(code: 49))
+    XCTAssertTrue(trigger.consumeKeyboardFocusRestoration())
   }
 
   @MainActor

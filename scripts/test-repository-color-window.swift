@@ -40,7 +40,7 @@ struct RepositoryColorWindowTestRunner {
       while Date() < deadline {
         RunLoop.current.run(until: Date().addingTimeInterval(0.01))
       }
-      check(app.windows.contains { $0.title == "Glance Settings" && $0.isVisible },
+      check(app.windows.contains { $0.title == SettingsCategory.repoColors.title && $0.isVisible },
         "The repository color action must open Settings.")
       check(settings.navigation.category == .repoColors,
         "Each link must restore the Repo Colors category.")

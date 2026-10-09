@@ -119,6 +119,7 @@ final class PullRequestBrowserTests: XCTestCase {
       created.append(page)
       return page
     }
+    store.preferences.linkOpening = .glance
     browser.bind(to: store)
     defer { browser.shutDown() }
     store.refresh()
@@ -157,6 +158,7 @@ final class PullRequestBrowserTests: XCTestCase {
       created.append(page)
       return page
     }
+    store.preferences.linkOpening = .glance
     browser.bind(to: store)
     defer { browser.shutDown() }
     store.refresh()
@@ -186,6 +188,7 @@ final class PullRequestBrowserTests: XCTestCase {
       created.append(page)
       return page
     }
+    store.preferences.linkOpening = .glance
     browser.bind(to: store)
     defer { browser.shutDown() }
     await settle()

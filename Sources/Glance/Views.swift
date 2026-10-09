@@ -10,6 +10,7 @@ struct DashboardView: View {
   @State private var searchText = ""
   @State private var snoozedIsCollapsed = true
   @State private var detailRowID: DashboardNavigation.RowID?
+  @State private var detailsOpenedWithKeyboard = false
   @State private var selectedPullRequestID: DashboardNavigation.RowID?
   @State private var matcher = KeybindingMatcher()
   @State private var sequenceExpiry: Task<Void, Never>?
@@ -220,6 +221,7 @@ struct DashboardView: View {
               checksAreCached: store.isShowingCachedData || store.errorMessage != nil
                 || store.sectionErrors[section.id] != nil
                 || store.lastUpdated.map { Date().timeIntervalSince($0) > store.preferences.refreshInterval } != false,
+              detailsOpenedWithKeyboard: detailsOpenedWithKeyboard,
               openLink: { store.openLink($0) },
               isMerging: store.mergingPullRequestIDs.contains(pullRequest.id),
               mergeError: store.mergeActionErrors[pullRequest.id],
@@ -355,6 +357,7 @@ struct DashboardView: View {
   }
 
   private func perform(_ action: GlanceAction, target: CommandTarget? = nil) {
+    if action == .details { detailsOpenedWithKeyboard = false }
     _ = commands.perform(action, target: target ?? selectedTarget)
   }
 
@@ -380,7 +383,9 @@ struct DashboardView: View {
     switch result {
     case .ignored: return false
     case .consumed: return true
-    case .action(let action): return commands.perform(action, target: target)
+    case .action(let action):
+      if action == .details { detailsOpenedWithKeyboard = true }
+      return commands.perform(action, target: target)
     }
   }
 
@@ -618,6 +623,7 @@ struct PullRequestRow: View {
   let select: () -> Void
   @Binding var isShowingDetails: Bool
   let checksAreCached: Bool
+  var detailsOpenedWithKeyboard = false
   var openLink: ((URL) -> Void)? = nil
   var isMerging = false
   var mergeError: String? = nil
@@ -631,6 +637,9 @@ struct PullRequestRow: View {
       DetailActionButton(
         label: "Details for \(pullRequest.repository) #\(pullRequest.number)",
         focusRequest: detailFocusRequest,
+        isShowingDetails: isShowingDetails,
+        keyboardPresentation: detailsOpenedWithKeyboard,
+        restoresFocusOnlyForKeyboard: true,
         help: keys.help(for: .details)
       ) {
         select()

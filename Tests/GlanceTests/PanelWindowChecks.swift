@@ -161,7 +161,7 @@ enum PanelWindowChecks {
       try check(!panel.isVisible, "Reactivating Glance must not reopen a dismissed dashboard.")
       let appDelegate = GlanceAppDelegate()
       appDelegate.commands = commands
-      try check(appDelegate.applicationShouldHandleReopen(NSApp, hasVisibleWindows: true) && !panel.isVisible,
+      try check(!appDelegate.applicationShouldHandleReopen(NSApp, hasVisibleWindows: true) && !panel.isVisible,
         "Clicking the Dock icon must only bring forward Glance windows that are already visible.")
       try check(!appDelegate.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false),
         "Glance must handle a Dock click when none of its windows are visible.")
@@ -182,7 +182,7 @@ enum PanelWindowChecks {
       pump()
       commands.showRepositoryColors(for: "Owner/Repo")
       pump()
-      guard let settingsWindow = NSApp.windows.first(where: { $0.title == "Glance Settings" && $0.isVisible }) else {
+      guard let settingsWindow = NSApp.windows.first(where: { $0.title == SettingsCategory.repoColors.title && $0.isVisible }) else {
         throw Failure(message: "The repository color action must open Settings.")
       }
       defer { settingsWindow.orderOut(nil) }

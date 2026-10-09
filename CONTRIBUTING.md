@@ -51,7 +51,7 @@ lipo dist/Glance.app/Contents/MacOS/Glance -verify_arch arm64 x86_64
 
 Local application bundles receive an ad-hoc signature without hardened runtime when a Developer ID identity is not available. This allows macOS to load bundled frameworks that have no Team ID. Certificate-signed builds keep hardened runtime and timestamping. You do not need the maintainer's signing or notarization credentials to contribute.
 
-`test-panel-window.sh` exercises the actual AppKit menu-bar button and panel, including resize notifications, reopening, and saved-frame restoration. It requires a macOS GUI session but not XCTest; `GLANCE_SDK_PATH` selects a specific installed SDK if needed.
+`test-panel-window.sh` exercises the actual AppKit menu-bar button, its popover, and the separate floating panel, including surface switching, resize notifications, reopening, and saved-frame restoration. It requires a macOS GUI session but not XCTest; `GLANCE_SDK_PATH` selects a specific installed SDK if needed.
 
 `test-pr-browser.sh` exercises a real retained WebKit page with an offline HTML fixture,
 including scroll position, a comment draft, expanded discussions, navigation, close/reopen,

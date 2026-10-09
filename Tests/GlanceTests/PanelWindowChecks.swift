@@ -34,7 +34,10 @@ enum PanelWindowChecks {
     let settings = SettingsWindowController(store: store, panelController: panel,
       updateController: updates, keys: keys, commands: commands)
     commands.configure(panel: panel, settings: settings)
-    let status = StatusItemController(store: store, keys: keys, commands: commands, panel: panel, statusItem: item)
+    let menuPopover = NSPopover()
+    menuPopover.animates = false
+    let status = StatusItemController(store: store, keys: keys, commands: commands, panel: panel,
+      statusItem: item, popover: menuPopover)
     defer { panel.hide() }
     var checks = 0
     func check(_ condition: @autoclosure () -> Bool, _ message: String) throws {
@@ -42,6 +45,7 @@ enum PanelWindowChecks {
       guard condition() else { throw Failure(message: message) }
     }
 
+    pump() // Let AppKit attach and position the status item before anchoring a popover.
     try withExtendedLifetime(status) {
       for value in ["840", "0", "-1", "\"NaN\"", "null"] {
         let preferences = try JSONDecoder().decode(Preferences.self, from: Data(
@@ -53,9 +57,23 @@ enum PanelWindowChecks {
       }
       item.button!.performClick(nil)
       pump()
-      try check(panel.isVisible, "The menu-bar button must open the native resizable panel, not a popover.")
+      try check(status.isPopoverShown && !panel.isVisible,
+        "The menu-bar button must open a popover without opening the floating panel.")
+      try check(menuPopover.contentSize == NSSize(width: 390, height: 590),
+        "The menu-bar surface must retain its compact content size after hosting attaches.")
+      item.button!.performClick(nil)
+      pump()
+      try check(!status.isPopoverShown && !panel.isVisible,
+        "Clicking the menu-bar button again must close the popover.")
+      item.button!.performClick(nil)
+      pump()
+      try check(status.isPopoverShown, "The menu-bar popover must reopen.")
+      commands.perform(.showPanel)
+      pump()
+      try check(panel.isVisible && !status.isPopoverShown,
+        "Showing the floating panel must dismiss the menu-bar popover.")
       guard let window = NSApp.windows.first(where: { $0.title == "Glance" && $0.isVisible }) else {
-        throw Failure(message: "The menu-bar button did not create the Glance window.")
+        throw Failure(message: "The Show floating panel command did not create the Glance window.")
       }
       try check(window is NSPanel && window.styleMask.contains(.resizable), "The displayed window must have native resize edges.")
       let originalFrame = window.frame
@@ -72,14 +90,16 @@ enum PanelWindowChecks {
       let resizedFrame = window.frame
       try check(resizedFrame != originalFrame, "The panel must accept a new height.")
       item.button!.performClick(nil)
-      try check(!panel.isVisible, "The same menu-bar button must hide the panel.")
+      pump()
+      try check(status.isPopoverShown && !panel.isVisible,
+        "A menu-bar click with the panel open must switch to the popover.")
       item.button!.performClick(nil)
       pump()
-      try check(panel.isVisible && window.frame == resizedFrame, "Reopening from the menu bar must retain the resized frame.")
-      panel.hide()
-      panel.show()
+      try check(!status.isPopoverShown, "The menu-bar button must close the popover.")
+      panel.toggleFromHotkey()
       pump()
-      try check(window.isVisible && window.frame == resizedFrame, "The hotkey's show path must reuse the same frame and window.")
+      try check(window.isVisible && window.frame == resizedFrame,
+        "The hotkey must reuse the floating panel's saved frame.")
 
       let popover = NSPopover()
       popover.animates = false
@@ -195,7 +215,7 @@ enum PanelWindowChecks {
 
   private static func pump() {
     // Focus transitions arrive as AppKit events, not just run-loop callbacks.
-    let deadline = Date().addingTimeInterval(0.15)
+    let deadline = Date().addingTimeInterval(0.4)
     while Date() < deadline {
       RunLoop.current.run(until: Date().addingTimeInterval(0.01))
       if let event = NSApp.nextEvent(matching: .any, until: Date().addingTimeInterval(0.01),

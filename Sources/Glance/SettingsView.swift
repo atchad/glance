@@ -97,10 +97,6 @@ struct GlanceSettingsView: View {
           .tag(category)
       }
       .listStyle(.sidebar)
-      .scrollContentBackground(.hidden)
-      .background { SettingsSidebarSurface().padding(.top, 8).ignoresSafeArea(.container, edges: .top) }
-      .padding(.horizontal, 8)
-      .padding(.bottom, 8)
       .navigationSplitViewColumnWidth(min: 208, ideal: 208, max: 208)
     } detail: {
       settingsPage

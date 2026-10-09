@@ -154,33 +154,11 @@ struct SettingsSearchField: NSViewRepresentable {
   }
 }
 
-/// Let AppKit draw the sidebar material and react to window activation and appearance.
-struct SettingsSidebarMaterial: NSViewRepresentable {
-  func makeNSView(context: Context) -> NSVisualEffectView {
-    let view = NSVisualEffectView()
-    view.material = .sidebar
-    view.blendingMode = .behindWindow
-    view.state = .followsWindowActiveState
-    return view
-  }
-  func updateNSView(_ view: NSVisualEffectView, context: Context) {}
-}
-
 struct SettingsSurface: ViewModifier {
   @Environment(\.colorScheme) private var colorScheme
   func body(content: Content) -> some View {
     content.background(
       colorScheme == .light ? Color(nsColor: .controlBackgroundColor) : Color.primary.opacity(0.035),
       in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-  }
-}
-
-struct SettingsSidebarSurface: View {
-  var body: some View {
-    if #available(macOS 26, *) {
-      Color.clear.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-    } else {
-      SettingsSidebarMaterial()
-    }
   }
 }

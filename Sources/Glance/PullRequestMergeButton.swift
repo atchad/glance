@@ -52,7 +52,8 @@ struct MergeActionTrigger: NSViewRepresentable {
 
   final class Trigger: NSButton {
     var performAction: (() -> Void)?
-    override var acceptsFirstResponder: Bool { isEnabled }
+    private var handlingPointer = false
+    override var acceptsFirstResponder: Bool { isEnabled && !handlingPointer }
 
     @objc func activate() {
       guard isEnabled else { return }
@@ -62,6 +63,9 @@ struct MergeActionTrigger: NSViewRepresentable {
     override func mouseDown(with event: NSEvent) {
       // Even inert status icons consume clicks rather than opening/dismissing the row.
       guard isEnabled else { return }
+      handlingPointer = true
+      if window?.firstResponder === self { window?.makeFirstResponder(nil) }
+      defer { handlingPointer = false }
       super.mouseDown(with: event)
     }
 

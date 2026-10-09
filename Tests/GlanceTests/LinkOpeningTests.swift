@@ -10,8 +10,9 @@ final class LinkOpeningTests: XCTestCase {
   private let application = LinkApplication(url: URL(fileURLWithPath: "/Applications/Fixture Browser.app"),
     bundleIdentifier: "test.fixture.browser")
 
-  func testPreferencesPreserveExistingDefaultAndRoundTripEveryDestination() throws {
-    XCTAssertEqual(try JSONDecoder().decode(Preferences.self, from: Data("{}".utf8)).linkOpening, .glance)
+  func testPreferencesDefaultToSystemBrowserAndRoundTripEveryDestination() throws {
+    XCTAssertEqual(Preferences().linkOpening, .defaultBrowser)
+    XCTAssertEqual(try JSONDecoder().decode(Preferences.self, from: Data("{}".utf8)).linkOpening, .defaultBrowser)
     for choice in [LinkOpeningPreference.glance, .defaultBrowser, .application(application)] {
       var preferences = Preferences.default
       preferences.linkOpening = choice
@@ -32,7 +33,7 @@ final class LinkOpeningTests: XCTestCase {
     {
       let data = Data("{\"linkOpening\":\(invalid),\"showAuthor\":false}".utf8)
       let preferences = try JSONDecoder().decode(Preferences.self, from: data)
-      XCTAssertEqual(preferences.linkOpening, .glance)
+      XCTAssertEqual(preferences.linkOpening, .defaultBrowser)
       XCTAssertTrue(preferences.recoveredInvalidValues)
       XCTAssertFalse(preferences.showAuthor)
     }
@@ -135,7 +136,7 @@ final class LinkOpeningTests: XCTestCase {
       XCTFail("Settings must host an actionable native application dropdown")
       return
     }
-    XCTAssertEqual(popup.selectedItem?.title, "Glance")
+    XCTAssertEqual(popup.selectedItem?.title, "Default browser")
     popup.selectItem(withTag: 0)
     XCTAssertTrue(popup.sendAction(action, to: popup.target))
     XCTAssertEqual(store.preferences.linkOpening, .defaultBrowser)
@@ -164,6 +165,7 @@ final class LinkOpeningTests: XCTestCase {
     let store = AppStore(storageDirectory: directory, externalLinkOpener: opener) { sections in
       ("fixture", sections.map { SectionSnapshot(id: $0.id, pullRequests: [pr]) })
     }
+    store.preferences.linkOpening = .glance
     var pages: [RoutingBrowserPage] = []
     let browser = PullRequestBrowser(dataStore: .nonPersistent()) { _ in
       let page = RoutingBrowserPage()

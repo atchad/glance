@@ -456,8 +456,8 @@ struct Preferences: Codable, Equatable {
     interval.isFinite && (15...900).contains(interval) ? interval : 60
   }
   var appearanceMode: AppearanceMode = .system
-  var showDockIcon = true
-  var linkOpening: LinkOpeningPreference = .glance
+  var showDockIcon = false
+  var linkOpening: LinkOpeningPreference = .defaultBrowser
   var panelLevel: PanelLevel = .floating
   var openPanelAtLaunch = false
   var openAtLogin = true
@@ -522,7 +522,7 @@ struct Preferences: Codable, Equatable {
       && (storedInterval == nil || storedInterval != refreshInterval)
     appearanceMode =
       try values.decodeIfPresent(AppearanceMode.self, forKey: .appearanceMode) ?? .system
-    showDockIcon = try values.decodeIfPresent(Bool.self, forKey: .showDockIcon) ?? true
+    showDockIcon = try values.decodeIfPresent(Bool.self, forKey: .showDockIcon) ?? false
     if values.contains(.linkOpening) {
       if let stored = try? values.decode(LinkOpeningPreference.self, forKey: .linkOpening), stored.isValid {
         if case .application(let application) = stored, application.isGlance { linkOpening = .glance }

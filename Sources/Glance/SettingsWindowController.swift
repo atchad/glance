@@ -47,8 +47,9 @@ final class SettingsWindowController: NSObject, ObservableObject, NSWindowDelega
       defer: false
     )
     window.title = "Glance Settings"
-    window.titleVisibility = .hidden
+    window.titleVisibility = .visible
     window.titlebarAppearsTransparent = true
+    window.toolbarStyle = .unified
     window.minSize = NSSize(width: 720, height: 540)
     window.contentMinSize = NSSize(width: 720, height: 540)
     window.setFrameAutosaveName("GlanceSettingsWindow")

@@ -96,9 +96,15 @@ struct GlanceSettingsView: View {
         SettingsCategoryLabel(category: category)
           .tag(category)
       }
+      .listStyle(.sidebar)
+      .scrollContentBackground(.hidden)
+      .background { SettingsSidebarSurface().padding(.top, 8).ignoresSafeArea(.container, edges: .top) }
+      .padding(.horizontal, 8)
+      .padding(.bottom, 8)
       .navigationSplitViewColumnWidth(min: 208, ideal: 208, max: 208)
     } detail: {
       settingsPage
+        .navigationTitle(navigation.category.title)
         .toolbar(removing: .sidebarToggle)
     }
     .onChange(of: columnVisibility) { _, visibility in
@@ -125,7 +131,7 @@ private struct GeneralSettingsPage: View {
   @ObservedObject var panel: FloatingPanelController
   var body: some View {
     SettingsForm {
-      Section {
+      SettingsGroup {
         Toggle(
           "Launch Glance at login",
           isOn: Binding(
@@ -139,11 +145,9 @@ private struct GeneralSettingsPage: View {
           .help("Show the pull-request panel immediately after Glance launches.")
       } header: {
         Text("Startup")
-      } footer: {
-        Text("Glance stays in the menu bar. Opening the panel at startup is optional.")
       }
-      Section("Appearance") {
-        Picker("Appearance", selection: $store.preferences.appearanceMode) {
+      SettingsGroup("Appearance") {
+        SettingsPicker("Appearance", selection: $store.preferences.appearanceMode) {
           ForEach(AppearanceMode.allCases) { mode in Text(mode.title).tag(mode) }
         }
         .help("Use the system appearance, or always use light or dark mode in Glance.")
@@ -151,7 +155,7 @@ private struct GeneralSettingsPage: View {
           .help("Show Glance in the Dock and Command–Tab switcher. When hidden, use the menu-bar icon or global shortcut.")
       }
       LinkOpeningSettingsView(store: store, session: store.githubWebSession)
-      Section {
+      SettingsGroup {
         Toggle(
           "Keep the panel above other windows",
           isOn: Binding(
@@ -164,7 +168,7 @@ private struct GeneralSettingsPage: View {
       } header: {
         Text("Window")
       } footer: {
-        Text("Drag the panel’s edges to resize it. Glance remembers its size and position across launches.")
+        SettingsDescription("Glance remembers the panel’s size and position.")
       }
     }
   }
@@ -176,7 +180,7 @@ private struct UpdateSettingsPage: View {
 
   var body: some View {
     SettingsForm {
-      Section("Software Updates") {
+      SettingsGroup("Software Updates") {
         Toggle(
           "Automatically check for updates",
           isOn: Binding(
@@ -189,10 +193,13 @@ private struct UpdateSettingsPage: View {
             set: { updates.setAutomaticallyDownloadsUpdates($0) })
         )
         .disabled(!updates.automaticallyChecksForUpdates)
-        Button("Check Now") { commands.perform(.checkForUpdates) }
-          .disabled(!updates.canCheckForUpdates)
+        HStack {
+          Spacer()
+          Button("Check Now") { commands.perform(.checkForUpdates) }
+            .disabled(!updates.canCheckForUpdates)
+        }
       }
-      Section("Installed Version") {
+      SettingsGroup("Installed Version") {
         LabeledContent("Version", value: installedVersion)
       }
     }
@@ -213,8 +220,8 @@ private struct ReviewSettingsPage: View {
   @ObservedObject var store: AppStore
   var body: some View {
     SettingsForm {
-      Section {
-        Picker("Count", selection: $store.preferences.menuBarCountMode) {
+      SettingsGroup {
+        SettingsPicker("Count", selection: $store.preferences.menuBarCountMode) {
           ForEach(MenuBarCountMode.allCases) { mode in Text(mode.title).tag(mode) }
         }
         .help("Choose what the number beside the menu-bar icon counts.")
@@ -226,10 +233,8 @@ private struct ReviewSettingsPage: View {
         }
       } header: {
         Text("Menu-bar count")
-      } footer: {
-        Text("Choose which pull requests contribute to the number beside the menu-bar icon.")
       }
-      Section {
+      SettingsGroup {
         Toggle(
           "Hide pull requests after I approve them",
           isOn: $store.preferences.removePullRequestsAfterApproval)
@@ -251,15 +256,17 @@ private struct ReviewSettingsPage: View {
         .disabled(!store.preferences.removePullRequestsAfterApproval)
         .help("Show an approved pull request again when your review is requested again.")
       } header: {
-        Text("Completed reviews")
-      } footer: {
-        Text("Hidden approved pull requests aren’t saved offline unless pinned. After restarting, changing these settings may require a refresh to show them again.")
+        HStack {
+          Text("Completed reviews")
+          SettingsHelpButton(title: "Completed reviews",
+            message: "Hidden approved pull requests aren’t saved offline unless pinned. After restarting, changing these settings may require a refresh to show them again.")
+        }
       }
-      Section("Row details") {
+      SettingsGroup("Row details") {
         Toggle("Author", isOn: $store.preferences.showAuthor)
         Toggle("Time", isOn: $store.preferences.showUpdatedAt)
         if store.preferences.showUpdatedAt {
-          Picker("Time represents", selection: $store.preferences.timeDisplayMode) {
+          SettingsPicker("Time represents", selection: $store.preferences.timeDisplayMode) {
             ForEach(TimeDisplayMode.allCases) { mode in Text(mode.title).tag(mode) }
           }
         }
@@ -272,8 +279,8 @@ private struct ReviewSettingsPage: View {
           "Command-click to dismiss a pull request until it changes",
           isOn: $store.preferences.commandClickDismisses)
       }
-      Section {
-        Picker("Refresh pull requests", selection: $store.preferences.refreshInterval) {
+      SettingsGroup {
+        SettingsPicker("Refresh pull requests", selection: $store.preferences.refreshInterval) {
           Text("Every 15 seconds").tag(TimeInterval(15))
           Text("Every 30 seconds").tag(TimeInterval(30))
           Text("Every minute").tag(TimeInterval(60))
@@ -286,7 +293,7 @@ private struct ReviewSettingsPage: View {
       } header: {
         Text("Refresh")
       } footer: {
-        Text("Glance keeps the last successful results visible if GitHub is temporarily unavailable.")
+        SettingsDescription("Glance keeps the last successful results visible if GitHub is temporarily unavailable.")
       }
     }
   }
@@ -298,7 +305,7 @@ private struct GitHubSettingsPage: View {
   @State private var showingRepositoryPicker = false
   var body: some View {
     SettingsForm {
-      Section("Account") {
+      SettingsGroup("Account") {
         LabeledContent(
           "GitHub account", value: store.viewerLogin.map { "@\($0)" } ?? "Not connected")
         LabeledContent("Authentication") {
@@ -310,7 +317,7 @@ private struct GitHubSettingsPage: View {
         }
         .accessibilityElement(children: .contain)
       }
-      Section {
+      SettingsGroup {
         LabeledContent {
           Button("Manage repositories…") { showingRepositoryPicker = true }
             .help("Choose which repositories appear in Glance and can send notifications.")
@@ -323,9 +330,9 @@ private struct GitHubSettingsPage: View {
       } header: {
         Text("Repositories")
       } footer: {
-        Text("Excluded repositories are removed from the list, cache, and notifications.")
+        SettingsDescription("Excluded repositories are removed from the list, cache, and notifications.")
       }
-      Section("Notifications") {
+      SettingsGroup("Notifications") {
         Toggle(
           "Allow pull request notifications",
           isOn: Binding(
@@ -359,18 +366,6 @@ private struct GitHubSettingsPage: View {
     let excluded = store.preferences.excludedRepositories.count
     if excluded == 0 { return "Every repository is visible." }
     return "\(excluded) \(excluded == 1 ? "repository is" : "repositories are") excluded."
-  }
-}
-
-private struct SettingsForm<Content: View>: View {
-  @ViewBuilder let content: Content
-  var body: some View {
-    Form { content }
-      .formStyle(.grouped)
-      .toggleStyle(.switch)
-      .contentMargins(.horizontal, 0, for: .scrollContent)
-      .contentMargins(.top, -12, for: .scrollContent)
-      .contentMargins(.bottom, 10, for: .scrollContent)
   }
 }
 
@@ -490,118 +485,117 @@ private struct SectionSettingsView: View {
   @State private var draft = SectionQueryDraft()
 
   var body: some View {
-    VStack(spacing: 0) {
-      List {
-        Section("Displayed in this order") {
-          ForEach($store.preferences.sections) { $section in
-            HStack(alignment: .center, spacing: 10) {
-              VStack(alignment: .leading, spacing: 5) {
+    SettingsForm {
+      SettingsGroup("Displayed in this order") {
+        ForEach($store.preferences.sections) { $section in
+          HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 5) {
+              HStack {
                 TextField("Section name", text: $section.name)
                   .textFieldStyle(.plain)
                   .font(.body)
-                SectionQueryEditor(section: $section, store: store)
+                Spacer()
                 Picker("Sort", selection: $section.sortMode) {
                   ForEach(PRSortMode.allCases) { mode in Text(mode.title).tag(mode) }
                 }
                 .labelsHidden()
                 .controlSize(.small)
-                .frame(maxWidth: 170, alignment: .leading)
+                .buttonStyle(.borderless)
+                .fixedSize()
                 .help("Choose how pull requests in this section are ordered.")
               }
-              VStack(spacing: 2) {
-                Button { moveSection(id: section.id, offset: -1) } label: {
-                  Image(systemName: "chevron.up")
-                }
-                .buttonStyle(.borderless)
-                .disabled(store.preferences.sections.first?.id == section.id)
-                .help("Move section up")
-                Button { moveSection(id: section.id, offset: 1) } label: {
-                  Image(systemName: "chevron.down")
-                }
-                .buttonStyle(.borderless)
-                .disabled(store.preferences.sections.last?.id == section.id)
-                .help("Move section down")
-              }
-              Button {
-                store.preferences.sections.removeAll { $0.id == section.id }
-                store.refresh()
-              } label: {
-                Image(systemName: "minus.circle.fill")
+              SectionQueryEditor(section: $section, store: store)
+            }
+            VStack(spacing: 2) {
+              Button { moveSection(id: section.id, offset: -1) } label: {
+                Image(systemName: "chevron.up")
               }
               .buttonStyle(.borderless)
-              .foregroundStyle(.secondary)
-              .help("Remove section")
+              .disabled(store.preferences.sections.first?.id == section.id)
+              .help("Move section up")
+              Button { moveSection(id: section.id, offset: 1) } label: {
+                Image(systemName: "chevron.down")
+              }
+              .buttonStyle(.borderless)
+              .disabled(store.preferences.sections.last?.id == section.id)
+              .help("Move section down")
             }
-            .padding(.vertical, 5)
+            Button {
+              store.preferences.sections.removeAll { $0.id == section.id }
+              store.refresh()
+            } label: {
+              Image(systemName: "minus.circle.fill")
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+            .help("Remove section")
           }
+          .padding(.vertical, 5)
         }
       }
-      .listStyle(.inset)
 
-      Divider()
-
-      VStack(alignment: .leading, spacing: 10) {
-        HStack {
-          Text("Add section")
-            .font(.headline)
-          Spacer()
-          Menu("Examples") {
-            ForEach(SectionQueryExample.allCases) { example in
-              Button(example.menuTitle) { draft.apply(example) }
+      SettingsGroup {
+        VStack(alignment: .leading, spacing: 12) {
+          HStack {
+            Text("Add section")
+              .font(.headline)
+            SettingsHelpButton(title: "Sections",
+              message: "Sections use GitHub pull request searches. Choose an example, edit it, then validate before adding it. Other visibility preferences still apply; a valid search may have no matching pull requests.")
+            Spacer()
+            Menu("Examples") {
+              ForEach(SectionQueryExample.allCases) { example in
+                Button(example.menuTitle) { draft.apply(example) }
+              }
             }
+            .fixedSize()
+            .help("Fill the new section draft with an editable example")
           }
-          .fixedSize()
-          .help("Fill the new section draft with an editable example")
-        }
-        HStack(spacing: 8) {
           TextField("Section name", text: $draft.name)
             .textFieldStyle(.roundedBorder)
-            .frame(width: 150)
           TextField("GitHub search", text: $draft.query)
             .textFieldStyle(.roundedBorder)
             .font(.system(.body, design: .monospaced))
-          Button {
-            let query = draft.query
-            guard let request = draft.beginValidation() else { return }
-            Task {
-              let error = await store.validateSectionQuery(query)
-              guard query == draft.query else { return }
-              draft.validation.finish(request, error: error)
+          HStack(spacing: 8) {
+            Spacer()
+            Button {
+              let query = draft.query
+              guard let request = draft.beginValidation() else { return }
+              Task {
+                let error = await store.validateSectionQuery(query)
+                guard query == draft.query else { return }
+                draft.validation.finish(request, error: error)
+              }
+            } label: {
+              if draft.validation.state == .validating {
+                ProgressView().controlSize(.small).frame(width: 48)
+              } else {
+                Text("Validate")
+              }
             }
-          } label: {
-            if draft.validation.state == .validating {
-              ProgressView().controlSize(.small).frame(width: 48)
-            } else {
-              Text("Validate")
+            .disabled(draft.validation.state == .validating || draft.requiresRepositoryReplacement)
+            .help("Validate this search with GitHub")
+            Button {
+              guard draft.canAdd else { return }
+              store.preferences.sections.append(PRSection(name: draft.name, query: draft.query))
+              draft = SectionQueryDraft()
+              store.refresh()
+            } label: {
+              Text("Add Section")
             }
+            .buttonStyle(.bordered)
+            .disabled(!draft.canAdd)
+            .help("Add section")
           }
-          .disabled(draft.validation.state == .validating || draft.requiresRepositoryReplacement)
-          .help("Validate this search with GitHub")
-          Button {
-            guard draft.canAdd else { return }
-            store.preferences.sections.append(PRSection(name: draft.name, query: draft.query))
-            draft = SectionQueryDraft()
-            store.refresh()
-          } label: {
-            Image(systemName: "plus")
+          if draft.requiresRepositoryReplacement {
+            Label("Replace OWNER/REPOSITORY with a repository, such as apple/swift, before validating.",
+              systemImage: "pencil")
+              .font(.caption).foregroundStyle(.secondary)
+          } else {
+            validationMessage
+              .frame(maxWidth: .infinity, alignment: .leading)
           }
-          .buttonStyle(.bordered)
-          .disabled(!draft.canAdd)
-          .help("Add section")
         }
-        if draft.requiresRepositoryReplacement {
-          Label("Replace OWNER/REPOSITORY with a repository, such as apple/swift, before validating.",
-            systemImage: "pencil")
-            .font(.caption).foregroundStyle(.secondary)
-        } else {
-          validationMessage
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        Text("Other visibility preferences still apply. A valid search may have no matching or visible pull requests.")
-          .font(.caption).foregroundStyle(.secondary)
       }
-      .padding(16)
-      .background(.bar)
     }
   }
 

@@ -11,55 +11,65 @@ struct RepositoryColorsSettingsPage: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      VStack(alignment: .leading, spacing: 5) {
-        Text("Repo Colors").font(.title2.weight(.semibold))
-        Text("New repositories cycle through ten colors. Your choices stay with each repository, even when it has no open pull requests.")
-          .font(.callout).foregroundStyle(.secondary)
-      }
-      TextField("Search repositories", text: $search)
-        .textFieldStyle(.roundedBorder)
-      if store.colorRepositories.isEmpty {
-        ContentUnavailableView("No repositories yet", systemImage: "paintpalette",
-          description: Text("Repositories appear here after Glance loads their pull requests."))
-      } else {
-        ScrollViewReader { proxy in
-          List(repositories, id: \.self, selection: $navigation.repository) { repository in
-            HStack(spacing: 10) {
-              Circle().fill(store.preferences.repositoryColor(for: repository)?
-                .displayColor(for: colorScheme) ?? .secondary).frame(width: 12, height: 12)
-                .accessibilityHidden(true)
-              Text(verbatim: repository).lineLimit(1)
-            }
-            .tag(repository)
-            .id(repository)
-          }
-          .listStyle(.inset)
-          .frame(minHeight: 120, maxHeight: .infinity)
-          .overlay {
-            if repositories.isEmpty {
-              Text("No matching repositories").foregroundStyle(.secondary)
-            }
-          }
-          .onAppear { proxy.scrollTo(navigation.repository, anchor: .center) }
-          .onChange(of: navigation.repositoryColorRequest) { _, _ in
-            search = ""
-            // Allow the filtered List to update before scrolling to a deep link.
-            DispatchQueue.main.async { proxy.scrollTo(navigation.repository, anchor: .center) }
-          }
+    ScrollView {
+      VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 5) {
+          Text("New repositories cycle through ten colors. Your choices stay with each repository, even when it has no open pull requests.")
+            .font(.subheadline).foregroundStyle(.secondary)
         }
-        Divider()
-        if let repository = navigation.repository,
-          let color = store.preferences.repositoryColor(for: repository)
-        {
-          colorEditor(repository: repository, color: color)
-            .id(repository)
+        HStack {
+          Spacer()
+          SettingsSearchField(text: $search, prompt: "Search repositories")
+            .frame(width: 220)
+        }
+        if store.colorRepositories.isEmpty {
+          ContentUnavailableView("No repositories yet", systemImage: "paintpalette",
+            description: Text("Repositories appear here after Glance loads their pull requests."))
         } else {
-          Text("Select a repository to change its color.").foregroundStyle(.secondary)
+          ScrollViewReader { proxy in
+            List(repositories, id: \.self, selection: $navigation.repository) { repository in
+              HStack(spacing: 10) {
+                Circle().fill(store.preferences.repositoryColor(for: repository)?
+                  .displayColor(for: colorScheme) ?? .secondary).frame(width: 12, height: 12)
+                  .accessibilityHidden(true)
+                Text(verbatim: repository).lineLimit(1)
+              }
+              .tag(repository)
+              .id(repository)
+            }
+            .listStyle(.inset)
+            .scrollContentBackground(.hidden)
+            .modifier(SettingsSurface())
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .frame(height: min(220, max(100, CGFloat(repositories.count) * 24 + 20)))
+            .overlay {
+              if repositories.isEmpty {
+                Text("No matching repositories").foregroundStyle(.secondary)
+              }
+            }
+            .onAppear { proxy.scrollTo(navigation.repository, anchor: .center) }
+            .onChange(of: navigation.repositoryColorRequest) { _, _ in
+              search = ""
+              // Allow the filtered List to update before scrolling to a deep link.
+              DispatchQueue.main.async { proxy.scrollTo(navigation.repository, anchor: .center) }
+            }
+          }
+          if let repository = navigation.repository,
+            let color = store.preferences.repositoryColor(for: repository)
+          {
+            colorEditor(repository: repository, color: color)
+              .padding(10)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .modifier(SettingsSurface())
+              .id(repository)
+          } else {
+            Text("Select a repository to change its color.").foregroundStyle(.secondary)
+          }
         }
       }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(20)
     }
-    .padding(20)
     .onAppear {
       if navigation.repository == nil { navigation.repository = store.colorRepositories.first }
     }
@@ -68,7 +78,7 @@ struct RepositoryColorsSettingsPage: View {
   private func colorEditor(repository: String, color: RepositoryColor) -> some View {
     VStack(alignment: .leading, spacing: 12) {
       Text(verbatim: repository)
-        .font(.headline).foregroundStyle(color.displayColor(for: colorScheme))
+        .font(.headline)
         .textSelection(.enabled)
       Text("Default colors").font(.subheadline)
       HStack(spacing: 9) {

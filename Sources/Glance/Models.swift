@@ -441,6 +441,7 @@ struct Preferences: Codable, Equatable {
   }
   var appearanceMode: AppearanceMode = .system
   var showDockIcon = true
+  var linkOpening: LinkOpeningPreference = .glance
   var panelLevel: PanelLevel = .floating
   var openPanelAtLaunch = false
   var openAtLogin = true
@@ -481,6 +482,7 @@ struct Preferences: Codable, Equatable {
 
   private enum CodingKeys: String, CodingKey {
     case refreshInterval, appearanceMode, showDockIcon, panelLevel, openPanelAtLaunch, openAtLogin, sections
+    case linkOpening
     case menuBarCountMode, includeMyPullRequestsInMenuBarCount
     case showAuthor, showUpdatedAt, showLineChanges, showCheckStatus, showReviewStatus
     case showAttentionReason
@@ -505,6 +507,12 @@ struct Preferences: Codable, Equatable {
     appearanceMode =
       try values.decodeIfPresent(AppearanceMode.self, forKey: .appearanceMode) ?? .system
     showDockIcon = try values.decodeIfPresent(Bool.self, forKey: .showDockIcon) ?? true
+    if values.contains(.linkOpening) {
+      if let stored = try? values.decode(LinkOpeningPreference.self, forKey: .linkOpening), stored.isValid {
+        if case .application(let application) = stored, application.isGlance { linkOpening = .glance }
+        else { linkOpening = stored }
+      } else { recoveredInvalidValues = true }
+    }
     panelLevel = try values.decodeIfPresent(PanelLevel.self, forKey: .panelLevel) ?? .floating
     openPanelAtLaunch = try values.decodeIfPresent(Bool.self, forKey: .openPanelAtLaunch) ?? false
     openAtLogin = try values.decodeIfPresent(Bool.self, forKey: .openAtLogin) ?? true
@@ -578,6 +586,7 @@ struct Preferences: Codable, Equatable {
     try values.encode(refreshInterval, forKey: .refreshInterval)
     try values.encode(appearanceMode, forKey: .appearanceMode)
     try values.encode(showDockIcon, forKey: .showDockIcon)
+    try values.encode(linkOpening, forKey: .linkOpening)
     try values.encode(panelLevel, forKey: .panelLevel)
     try values.encode(openPanelAtLaunch, forKey: .openPanelAtLaunch)
     try values.encode(openAtLogin, forKey: .openAtLogin)

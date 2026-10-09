@@ -21,6 +21,7 @@ struct DashboardView: View {
       searchField
       Divider()
       if let message = store.storageErrorMessage { errorBanner(message) }
+      if let message = store.linkOpeningErrorMessage { errorBanner(message) }
       if let message = keys.errorMessage ?? keys.registrationError { errorBanner(message) }
       if store.errorMessage != nil, store.snapshots.isEmpty {
         if store.connectionIssue == .authentication {
@@ -203,7 +204,8 @@ struct DashboardView: View {
                 set: { detailRowID = $0 ? rowID(section, pullRequest) : nil }),
               checksAreCached: store.isShowingCachedData || store.errorMessage != nil
                 || store.sectionErrors[section.id] != nil
-                || store.lastUpdated.map { Date().timeIntervalSince($0) > store.preferences.refreshInterval } != false
+                || store.lastUpdated.map { Date().timeIntervalSince($0) > store.preferences.refreshInterval } != false,
+              openLink: { store.openLink($0) }
             )
             .id(rowID(section, pullRequest))
             if pullRequest.id != items.last?.id {
@@ -598,6 +600,7 @@ struct PullRequestRow: View {
   let select: () -> Void
   @Binding var isShowingDetails: Bool
   let checksAreCached: Bool
+  var openLink: ((URL) -> Void)? = nil
   @State private var detailFocusRequest = 0
   @State private var hovering = false
 
@@ -620,6 +623,7 @@ struct PullRequestRow: View {
         PullRequestDetailsView(pullRequest: pullRequest, checksAreCached: checksAreCached,
           copy: { perform(.copyTitle) },
           repositoryColor: preferences.repositoryColor(for: pullRequest.repository),
+          openLink: openLink,
           editRepositoryColor: editRepositoryColor) {
           isShowingDetails = false
         }

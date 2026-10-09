@@ -150,6 +150,7 @@ private struct GeneralSettingsPage: View {
         Toggle("Show Dock icon", isOn: $store.preferences.showDockIcon)
           .help("Show Glance in the Dock and Command–Tab switcher. When hidden, use the menu-bar icon or global shortcut.")
       }
+      LinkOpeningSettingsView(store: store, session: store.githubWebSession)
       Section {
         Toggle(
           "Keep the panel above other windows",
@@ -302,7 +303,7 @@ private struct GitHubSettingsPage: View {
           "GitHub account", value: store.viewerLogin.map { "@\($0)" } ?? "Not connected")
         LabeledContent("Authentication") {
           HStack {
-            Link("GitHub CLI Setup…", destination: URL(string: "https://cli.github.com/")!)
+            Button("GitHub CLI Setup…") { store.openLink(URL(string: "https://cli.github.com/")!) }
             Button("Check Connection") { commands.perform(.refresh) }
           }
           .accessibilityElement(children: .contain)

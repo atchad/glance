@@ -39,6 +39,7 @@ struct GlanceApp: App {
     appDelegate.commands = commands
     appDelegate.configureDockIcon(store: store)
     DispatchQueue.main.async {
+      store.enablePullRequestBrowser()
       store.configureLoginItemAtLaunch()
       store.start()
       if store.preferences.openPanelAtLaunch { panel.show() }

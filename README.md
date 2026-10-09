@@ -32,6 +32,8 @@ Clicking the Dock icon opens the panel when no Glance window is visible.
 - Supports local search, keyboard triage, and an optional system-wide shortcut for the panel. J/K or arrows traverse expanded search results; Return opens, D dismisses, and P toggles a pin on the selected row. Duplicate PRs are visited in section order. Hiding a selected row clears selection. Slash focuses search, where normal text editing takes precedence.
 - Lets you choose which repositories appear in the app and can generate notifications.
 - Keeps the last successful results visible when GitHub is temporarily unavailable.
+- Preloads listed PRs in native browser windows. Closing a window hides its live page;
+  reopening retains scroll position, unfinished comments, and expanded discussions.
 - Opens at login and refreshes automatically on your preferred schedule.
 - Checks for new Glance releases and can install them automatically.
 
@@ -95,7 +97,67 @@ Glance starts with sections for pull requests requesting your review and pull re
   between the status icons and repository name; hover over an icon for its caption. Open Details
   to read or copy a full title when it is truncated.
 
-Click a pull request to open it on GitHub. Its context menu can also copy the URL or branch name.
+Click a pull request to open it in the application selected in Settings → General → Links.
+Its context menu can also copy the URL or branch name.
+
+### Choose where links open
+
+The **Open links with** dropdown offers Default browser, Glance, applications recommended
+by macOS for HTTPS links, and Choose application… to pick an application from disk. A custom
+selection remains in the dropdown and persists across launches. This setting applies to
+PRs, fetched check links, and notification links; it does not change your Mac's default
+browser. If the selected application moves, Glance tries to find it by bundle identifier.
+If it is removed or cannot open the link, Glance falls back to your default browser and
+shows a warning. Glance remains the default for existing and new profiles.
+
+Selecting Glance shows a **GitHub website** row below the dropdown. **Log in…** opens GitHub's
+normal login page in a dedicated window sharing the PR windows' WebKit cookie store. The
+row switches to **Log out…** when it detects an unexpired GitHub login/session cookie pair,
+and shows the account name when GitHub supplies it. This is a local website-session indicator,
+not server verification: a stored session may expire or be revoked. Sign in using the same
+account as GitHub CLI; Glance does not exchange CLI or OAuth/API tokens for website cookies.
+
+Logging out asks for confirmation, closes all Glance browser windows (including hidden
+pages), discards unfinished work, and clears GitHub website cookies and storage in Glance.
+It does not sign out GitHub CLI, other browsers, or unrelated websites. The dropdown hides
+this authentication row when another application is selected.
+
+Selecting another application stops new background preloads and releases never-opened
+preloads. Pages you have opened remain intact until their PR leaves the dashboard or you
+quit; switching back to Glance reuses them.
+
+### Persistent PR windows
+
+When Glance is selected as the link-opening application, it gradually preloads one GitHub
+page per unique listed PR, including rows in collapsed
+sections and rows hidden by local search. There is no page-count limit; large queues can use
+substantial memory. Clicking a PR before its preload finishes shows the page while it loads.
+Repeated clicks bring the same window forward. The close button and Command–W hide the window
+without navigating or reloading it, preserving its current GitHub tab, scroll position,
+expanded sections, and unfinished work during this Glance session.
+
+Sign in using Settings → General → Links → Log in… or inside a PR window once. These windows share a persistent WebKit cookie
+store, separate from Safari, Chrome, and GitHub CLI authentication. Never-opened preloads
+are reloaded when the browser sign-in changes; pages you have opened are not. Use the window's
+Back, Forward, Reload, and Open in Default Browser controls as needed. External links and
+new-window links open in your default browser. Some organization sign-in or popup-based
+authentication flows may require using your regular browser instead.
+
+Glance's queue refresh updates PR metadata but does **not** reload these browser pages.
+GitHub controls its own live page updates; hidden pages can be throttled and live connections
+can stall. Glance does not periodically reload pages or promise that they are always current.
+Reload (Command–R) asks for confirmation because it can lose a comment draft, review edits,
+expanded sections, or scroll position. A WebKit process failure shows a recovery message
+instead of silently reloading.
+
+When a PR leaves all configured sections or is hidden by dismissal, approval filters,
+or repository exclusion, Glance automatically closes and discards its page, **including
+unfinished work**, even if the window is visible. This also cleans up merged or closed PRs
+when they leave a section's search results. A failed refresh retains the existing results
+and their pages. Removing a PR from one section does not discard it if it remains in another.
+Snoozed PRs remain listed in the dashboard's Snoozed section and retain their pages.
+Quitting Glance discards all live pages; sign-in persists, but live page state is not restored
+after relaunch or a WebKit process crash.
 
 ## Privacy and local data
 
@@ -104,6 +166,11 @@ Glance asks GitHub CLI for your existing token when it refreshes and does not pe
 ```text
 ~/Library/Application Support/Glance
 ```
+
+Preloading contacts GitHub for each listed PR even before you open its window. Embedded GitHub
+pages use normal WebKit website storage (cookies, cache, and website-managed data), which may
+contain private content. Glance does not inject the CLI token into pages or collect comment
+drafts. Discarding a page releases its live view; it does not erase shared website storage.
 
 Excluding a repository removes its pull requests from the live queue and local cache and prevents new notifications from that repository. This filters the active app data; it does not erase recovery copies, external backups, previously delivered notifications, or matching text in saved queries and preferences.
 

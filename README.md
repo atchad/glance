@@ -72,6 +72,8 @@ Glance labels a review request as yours when GitHub names your account directly 
 
 Dismissed reviews do not count as your approval, so they remain visible under the default approval filter when returned by a section’s query. Their review date and commit still support personal re-request and new-commit attention. The optional filter for approvals from other reviewers still applies independently. Older cached approvals remain unchanged until fresh GitHub data replaces them; previously hidden PRs require a successful refresh to return.
 
+Each PR row prepends a green thumbs-up when you approved it or a red thumbs-down when you requested changes, independently of its overall review status. Comments-only, dismissed, and pending reviews show no personal indicator.
+
 Glance starts with sections for pull requests requesting your review and pull requests you opened. In Settings, you can:
 
 - Add, rename, reorder, or remove sections backed by validated GitHub pull-request searches. The Add section Examples menu fills editable drafts for assigned PRs, your non-draft PRs, or a repository. Replace the repository template, validate, then add; visibility preferences still apply.

@@ -5,6 +5,33 @@ import XCTest
 
 @MainActor
 final class PullRequestRowTests: XCTestCase {
+  func testPersonalReviewIndicatorOnlyShowsApprovalOrChangesRequested() {
+    for (state, caption) in [
+      ("APPROVED", "Approved by you"),
+      ("CHANGES_REQUESTED", "Changes requested by you"),
+      ("COMMENTED", nil), ("DISMISSED", nil), ("PENDING", nil), (nil, nil),
+    ] as [(String?, String?)] {
+      let host = NSHostingView(rootView: rowView(makePullRequest(viewerReviewState: state), width: 400))
+      _ = host.fittingSize
+      host.layoutSubtreeIfNeeded()
+      let captions = nativeTooltips(in: host)
+      XCTAssertEqual(captions.contains("Approved by you"), caption == "Approved by you")
+      XCTAssertEqual(captions.contains("Changes requested by you"), caption == "Changes requested by you")
+      // Personal and aggregate review status are independent.
+      XCTAssertTrue(captions.contains("Approved"))
+    }
+  }
+
+  func testPersonalReviewIndicatorPreservesTwoLineRowHeight() {
+    for width: CGFloat in [280, 360, 600] {
+      let baseline = rowHeight(makePullRequest(), width: width)
+      for state in ["APPROVED", "CHANGES_REQUESTED", "COMMENTED"] {
+        XCTAssertEqual(rowHeight(makePullRequest(viewerReviewState: state), width: width),
+          baseline, accuracy: 0.5)
+      }
+    }
+  }
+
   private var directory: URL!
   private var keys: KeybindingStore!
 
@@ -183,14 +210,15 @@ final class PullRequestRowTests: XCTestCase {
   }
 
   private func makePullRequest(
-    title: String = "Fix checks", checks: PullRequest.CheckState = .failure
+    title: String = "Fix checks", checks: PullRequest.CheckState = .failure,
+    viewerReviewState: String? = nil
   ) -> PullRequest {
     PullRequest(
       id: "PR_1", number: 1, repository: "owner/repo", title: title, author: "author",
       authorAvatarURL: nil, url: URL(string: "https://github.com/owner/repo/pull/1")!,
       branch: "feature", headRefOID: "abc123", createdAt: .now, reviewRequestedAt: nil,
       updatedAt: .now, isDraft: false, reviewDecision: "APPROVED", checksState: checks,
-      additions: 1, deletions: 0, labels: [], requestedReviewers: [], viewerReviewState: nil,
+      additions: 1, deletions: 0, labels: [], requestedReviewers: [], viewerReviewState: viewerReviewState,
       viewerReviewedHeadOID: nil, viewerReviewSubmittedAt: nil,
       hasCurrentApprovalFromOtherReviewer: false, stackPosition: nil, stackSize: nil,
       viewerDidAuthor: true, mergeState: .clean, unresolvedConversationCount: 0, checks: nil,

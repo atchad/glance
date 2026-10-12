@@ -735,6 +735,7 @@ struct PullRequestRow: View {
   private var summaryLine: some View {
     HStack(spacing: 7) {
       HStack(spacing: 7) {
+        personalReviewIcon
         if preferences.showReviewStatus || preferences.showCheckStatus { statusSlots }
         if preferences.showAttentionReason, let attention = pullRequest.rowAttention {
           AttentionReasonIcon(summary: attention).fixedSize()
@@ -822,6 +823,25 @@ struct PullRequestRow: View {
         .nativeHelp("Checks neutral").accessibilityLabel("Checks neutral")
     case .unknown: Color.clear
     }
+  }
+
+  @ViewBuilder private var personalReviewIcon: some View {
+    switch pullRequest.viewerReviewState {
+    case "APPROVED":
+      personalReviewIcon(symbol: "hand.thumbsup.fill", text: "Approved by you", color: .statusGreen)
+    case "CHANGES_REQUESTED":
+      personalReviewIcon(symbol: "hand.thumbsdown.fill", text: "Changes requested by you", color: .red)
+    default: EmptyView()
+    }
+  }
+
+  private func personalReviewIcon(symbol: String, text: String, color: Color) -> some View {
+    Image(systemName: symbol)
+      .resizable().scaledToFit()
+      .frame(width: 11, height: 11)
+      .foregroundStyle(color)
+      .nativeHelp(text)
+      .accessibilityLabel(text)
   }
 
   @ViewBuilder private var reviewIcon: some View {

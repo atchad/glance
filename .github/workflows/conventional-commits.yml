@@ -12,8 +12,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  conventional-title:
-    name: Conventional PR title
+  conventional-commits:
+    name: Conventional Commits
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -21,7 +21,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Validate title
+          fetch-depth: 0
+      - name: Validate title and new commits
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: python3 scripts/conventional_commits.py

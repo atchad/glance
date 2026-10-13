@@ -4,6 +4,7 @@
 import os
 import re
 import sys
+import subprocess
 
 
 HEADER_PATTERN = (
@@ -11,8 +12,6 @@ HEADER_PATTERN = (
     r"(\([^()\r\n]+\))?(!)?: (\S[^\r\n]*)$"
 )
 HEADER = re.compile(HEADER_PATTERN)
-# GitHub's commit-message restriction evaluates the full message, including its body.
-MESSAGE_PATTERN = HEADER_PATTERN[:-1] + r"(\r?\n[\s\S]*)?$"
 
 
 def description(subject):
@@ -27,6 +26,7 @@ def is_breaking(message):
 
 if __name__ == "__main__":
     title = os.environ.get("PR_TITLE", "")
+    valid = True
     if not HEADER.fullmatch(title):
         print(
             "PR titles must use <type>[optional scope][optional !]: <description>.\n"
@@ -34,5 +34,21 @@ if __name__ == "__main__":
             "Example: fix(settings): anchor shortcut search",
             file=sys.stderr,
         )
-        sys.exit(1)
-    print("PR title follows Conventional Commits.")
+        valid = False
+    base = os.environ.get("PR_BASE_SHA")
+    head = os.environ.get("PR_HEAD_SHA")
+    if base or head:
+        if not all(value and re.fullmatch(r"[0-9a-f]{40,64}", value) for value in (base, head)):
+            print("Both PR_BASE_SHA and PR_HEAD_SHA must be full commit hashes.", file=sys.stderr)
+            sys.exit(1)
+        commits = subprocess.check_output(
+            ["git", "log", "--format=%H", f"{base}..{head}"]
+        ).decode().splitlines()
+        for commit in commits:
+            subject = subprocess.check_output(
+                ["git", "show", "-s", "--format=%s", commit]
+            ).decode().rstrip("\n")
+            if not HEADER.fullmatch(subject):
+                print(f"Commit {commit[:12]} needs a Conventional Commit subject: {subject}", file=sys.stderr)
+                valid = False
+    sys.exit(0 if valid else 1)

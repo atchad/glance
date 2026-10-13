@@ -129,7 +129,9 @@ chore(release): prepare Glance 0.5.4 release
 feat(config)!: change the keybinding format
 ```
 
-The `Conventional PR title` check runs when a PR is opened, updated, or renamed. GitHub requires this check alongside CI, defaults squash messages to the PR title, and restricts new commit messages on `main` to this format. Historical commits are not rewritten. Dependabot titles use `build(deps)` for Swift updates and `ci(deps)` for GitHub Actions updates.
+The required `Conventional Commits` check validates both the PR title and every new commit when a PR is opened, updated, or renamed. GitHub allows only squash merges and defaults squash messages to the validated PR title. Existing `main` history is not checked or rewritten. Dependabot titles use `build(deps)` for Swift updates and `ci(deps)` for GitHub Actions updates.
+
+Keep the validated title as the squash commit subject when merging. GitHub's native commit-message restrictions require an Enterprise organization and are unavailable for this repository, so the final merge-message editor cannot be locked down.
 
 ### Reuse one application for both installers
 

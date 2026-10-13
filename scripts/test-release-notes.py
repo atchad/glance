@@ -3,14 +3,13 @@
 
 import plistlib
 import os
-import re
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from conventional_commits import HEADER, MESSAGE_PATTERN
+from conventional_commits import HEADER
 
 
 GENERATOR = Path(__file__).with_name("generate-release-notes.py")
@@ -148,6 +147,24 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertIn("**Breaking change:** change the keybinding format", notes)
         self.assertIn("**Breaking change:** replace cache schema", notes)
 
+    def test_commit_validator_checks_only_new_commits(self):
+        self.baseline()
+        base = self.git("rev-parse", "HEAD").strip()
+        self.commit("fix(settings): repair scrolling\n\nDetailed explanation.")
+        head = self.git("rev-parse", "HEAD").strip()
+        validator = GENERATOR.with_name("conventional_commits.py")
+        env = dict(os.environ, PR_TITLE="fix(settings): repair scrolling", PR_BASE_SHA=base, PR_HEAD_SHA=head)
+        result = subprocess.run([sys.executable, str(validator)], cwd=self.repo, env=env,
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.commit("Unformatted new commit")
+        env["PR_HEAD_SHA"] = self.git("rev-parse", "HEAD").strip()
+        result = subprocess.run([sys.executable, str(validator)], cwd=self.repo, env=env,
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Unformatted new commit", result.stderr)
+        self.assertNotIn("Previous release", result.stderr)
+
 
 class ConventionalCommitTests(unittest.TestCase):
     def test_valid_headers(self):
@@ -172,12 +189,15 @@ class ConventionalCommitTests(unittest.TestCase):
             with self.subTest(title=title):
                 self.assertIsNone(HEADER.fullmatch(title))
 
-    def test_repository_pattern_accepts_bodies_but_requires_valid_header(self):
-        pattern = re.compile(MESSAGE_PATTERN)
-        self.assertIsNotNone(pattern.fullmatch("fix: repair scrolling\n\nDetailed explanation.\n"))
-        self.assertIsNotNone(pattern.fullmatch("feat!: change format\n\nBREAKING CHANGE: new format"))
-        self.assertIsNone(pattern.fullmatch("Repair scrolling\n\nfix: valid line later"))
-        self.assertIsNone(pattern.fullmatch("fix: \n\nDescription only in body"))
+    def test_commit_validator_rejects_invalid_range(self):
+        validator = GENERATOR.with_name("conventional_commits.py")
+        result = subprocess.run(
+            [sys.executable, str(validator)],
+            env=dict(os.environ, PR_TITLE="fix: repair scrolling", PR_BASE_SHA="--all", PR_HEAD_SHA="HEAD"),
+            capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("full commit hashes", result.stderr)
 
     def test_title_validator_cli_exit_status(self):
         validator = GENERATOR.with_name("conventional_commits.py")

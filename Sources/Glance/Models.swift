@@ -270,13 +270,20 @@ struct PullRequest: Codable, Identifiable, Hashable {
     switch reviewDecision {
     case "APPROVED": return RowGlyph(icon: .approved, help: "Approved", color: .secondary)
     case "CHANGES_REQUESTED": return RowGlyph(icon: .changesRequested, help: "Changes requested", color: .red)
-    case "REVIEW_REQUIRED": return RowGlyph(icon: .reviewPending, help: "Review pending", color: .secondary)
-    default: return nil
+    default:
+      // Yellow: you asked peers for review and are waiting on them.
+      if viewerDidAuthor == true, !requestedReviewers.isEmpty {
+        return RowGlyph(icon: .reviewPending,
+          help: "Awaiting review from \(requestedReviewers.joined(separator: ", "))", color: .yellow)
+      }
+      return reviewDecision == "REVIEW_REQUIRED"
+        ? RowGlyph(icon: .reviewPending, help: "Review pending", color: .secondary) : nil
     }
   }
 }
 
-/// Row color is reserved for blockers (red) and your turn (orange); healthy and waiting states are muted.
+/// Row color is reserved for blockers (red), your turn (orange), and peers you asked to review
+/// (yellow); other healthy and waiting states are muted.
 struct RowGlyph: Equatable {
   let icon: Octicon
   let help: String

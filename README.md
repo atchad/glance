@@ -101,11 +101,12 @@ Glance starts with sections for pull requests requesting your review and pull re
 ### Row icons
 
 Each fact appears once, always with the same icon. Color is reserved: red means the PR is
-blocked, orange means it is your turn, and green or purple on the merge icon means it will merge
-or has merged. Everything else is muted.
+blocked, orange means it is your turn, yellow means you are waiting on reviewers you requested,
+and green or purple on the merge icon means it will merge or has merged. Everything else is muted.
 
 - **Review:** on someone else's PR, your own approval or requested changes; otherwise GitHub's
-  overall decision (approved, changes requested, or review pending).
+  overall decision (approved, changes requested, or review pending). On your own PR, the pending
+  dot turns yellow while review requests are outstanding; hover to see who you're waiting on.
 - **Checks:** passed, failed, running, or neutral.
 - **Attention:** the most urgent remaining reason, such as a repeated review request, new commits
   since your review, merge conflicts, unresolved conversations, or a branch that is behind. Reasons

@@ -208,6 +208,22 @@ final class ModelsTests: XCTestCase {
     XCTAssertNil(makePullRequest(reviewDecision: nil).reviewGlyph)
   }
 
+  func testRequestedPeerReviewsTurnYourPendingDotYellow() {
+    let requested = makePullRequest(reviewers: ["alice", "platform-team"], reviewDecision: "REVIEW_REQUIRED",
+      viewerDidAuthor: true)
+    XCTAssertEqual(requested.reviewGlyph,
+      RowGlyph(icon: .reviewPending, help: "Awaiting review from alice, platform-team", color: .yellow))
+    let optional = makePullRequest(reviewers: ["alice"], reviewDecision: nil, viewerDidAuthor: true)
+    XCTAssertEqual(optional.reviewGlyph?.color, .yellow, "Requests count even when reviews aren't required")
+    let nobodyAsked = makePullRequest(reviewDecision: "REVIEW_REQUIRED", viewerDidAuthor: true)
+    XCTAssertEqual(nobodyAsked.reviewGlyph,
+      RowGlyph(icon: .reviewPending, help: "Review pending", color: .secondary))
+    let approved = makePullRequest(reviewers: ["bob"], reviewDecision: "APPROVED", viewerDidAuthor: true)
+    XCTAssertEqual(approved.reviewGlyph?.icon, .approved, "A decision outranks outstanding requests")
+    let theirs = makePullRequest(reviewers: ["alice"], reviewDecision: "REVIEW_REQUIRED")
+    XCTAssertEqual(theirs.reviewGlyph?.color, .secondary, "Only your own PRs show peer requests")
+  }
+
   func testRowColorIsReservedForBlockersAndYourTurn() {
     XCTAssertEqual(PullRequest.CheckState.success.glyph?.color, .secondary)
     XCTAssertEqual(PullRequest.CheckState.pending.glyph?.color, .secondary)

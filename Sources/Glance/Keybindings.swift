@@ -55,7 +55,7 @@ enum GlanceAction: String, CaseIterable, Identifiable, Codable {
     case .previousPR: ["k", "up"]
     case .firstPR: ["g g"]
     case .lastPR: ["shift+g"]
-    case .search: ["/"]
+    case .search: ["/", "cmd+f"]
     case .clearSearch: ["shift+/"]
     case .openPR: ["return"]
     case .details: ["i"]

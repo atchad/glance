@@ -1,6 +1,7 @@
 ## Summary
 
 <!-- What problem does this solve, and what changes for users? -->
+<!-- Use a Conventional Commit title, e.g. fix(settings): anchor shortcut search. -->
 
 ## Verification
 

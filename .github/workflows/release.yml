@@ -74,7 +74,9 @@ jobs:
           zsh -n scripts/*.sh
 
       - name: Run tests
-        run: swift test
+        run: |
+          swift test
+          python3 scripts/test-release-notes.py
 
       - name: Import Developer ID certificates
         shell: zsh {0}
@@ -170,7 +172,7 @@ jobs:
             dist/appcast.xml \
             dist/SHA256SUMS.txt \
             --verify-tag \
-            --generate-notes \
+            --notes-file dist/release-notes.md \
             --title "Glance ${GITHUB_REF_NAME#v}"
 
       - name: Remove temporary signing material

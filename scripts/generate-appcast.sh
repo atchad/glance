@@ -27,15 +27,8 @@ tag="v$version"
 download_url="https://github.com/atchad/glance/releases/download/$tag/Glance.dmg"
 cp "$dmg_path" "$archive_root/Glance.dmg"
 
-previous_tag="$(
-  git -C "$repo_root" tag --merged HEAD --sort=-version:refname \
-    | awk -v current="$tag" '$0 ~ /^v[0-9]+\.[0-9]+\.[0-9]+$/ && $0 != current { print; exit }'
-)"
-if [[ -n "$previous_tag" ]]; then
-  git -C "$repo_root" log --format='- %s' "$previous_tag..HEAD" > "$archive_root/Glance.md"
-else
-  git -C "$repo_root" log -1 --format='- %s' HEAD > "$archive_root/Glance.md"
-fi
+python3 "$repo_root/scripts/generate-release-notes.py" > "$repo_root/dist/release-notes.md"
+cp "$repo_root/dist/release-notes.md" "$archive_root/Glance.md"
 
 arguments=(
   --download-url-prefix "https://github.com/atchad/glance/releases/download/$tag/"

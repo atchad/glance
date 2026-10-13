@@ -32,6 +32,7 @@ jobs:
       - name: Run tests
         run: |
           swift test
+          python3 scripts/test-release-notes.py
           zsh scripts/test-keybindings.sh
           zsh scripts/test-panel-window.sh
           zsh scripts/test-repository-color-window.sh

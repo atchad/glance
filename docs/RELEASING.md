@@ -104,6 +104,35 @@ https://github.com/atchad/glance/releases/latest/download/Glance.dmg
 
 Published release assets are available directly from the public repository. The repository must be public before shipping the first Sparkle-enabled release so installed apps can fetch the appcast without GitHub authentication. Each release also includes a signed PKG, signed `appcast.xml`, and `SHA256SUMS.txt` for independent verification.
 
+### Release notes
+
+GitHub and the Sparkle update window use the same generated notes. `scripts/generate-release-notes.py` lists first-parent commit subjects since the previous version tag, removes Conventional Commit prefixes, and excludes release-preparation entries such as `chore(release): prepare Glance 0.5.4 release` and historical `Prepare Glance 0.5.3 release (#82)` entries. First-parent history lists a merged PR once instead of also including its internal commits. Product changes should have clear descriptions because those descriptions become release notes.
+
+Preview the notes before tagging:
+
+```sh
+python3 scripts/generate-release-notes.py
+```
+
+Use `--revision v0.5.3` to check a historical release. Appcast generation saves the notes as `dist/release-notes.md`, embeds them in the signed feed, and the workflow uses that file as the GitHub Release body.
+
+### Conventional Commits
+
+PR titles and new commits must use `<type>[optional scope][optional !]: <description>`, following [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). Accepted types are `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, and `test`. Use `!` for breaking changes, or include a `BREAKING CHANGE:` footer in the commit body.
+
+Examples:
+
+```text
+feat(reviews): show personal review indicators
+fix(settings): anchor shortcut search
+chore(release): prepare Glance 0.5.4 release
+feat(config)!: change the keybinding format
+```
+
+The required `Conventional Commits` check validates both the PR title and every new commit when a PR is opened, updated, or renamed. GitHub allows only squash merges and defaults squash messages to the validated PR title. Existing `main` history is not checked or rewritten. Dependabot titles use `build(deps)` for Swift updates and `ci(deps)` for GitHub Actions updates.
+
+Keep the validated title as the squash commit subject when merging. GitHub's native commit-message restrictions require an Enterprise organization and are unavailable for this repository, so the final merge-message editor cannot be locked down.
+
 ### Reuse one application for both installers
 
 Build and sign the universal application once with `./scripts/build-app.sh release`, then run `./scripts/build-dmg.sh --use-existing-app` and `./scripts/build-pkg.sh --use-existing-app`. Both packagers verify the existing application's signature and architectures before copying it. The release workflow uses this sequence so the DMG and PKG contain the same app. Running either packager without the flag still builds its own application first.

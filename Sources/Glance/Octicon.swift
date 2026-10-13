@@ -13,6 +13,16 @@ enum Octicon: String, CaseIterable {
   case checksPassed = "check-circle-16"
   case checksFailed = "x-circle-16"
   case checksRunning = "clock-16"
+  case checksNeutral = "skip-16"
+  case viewerApproved = "thumbsup-16"
+  case viewerChangesRequested = "thumbsdown-16"
+  case reviewRerequested = "sync-16"
+  case newCommits = "git-commit-16"
+  case mergeConflict = "alert-16"
+  case conversations = "comment-discussion-16"
+  case branchBehind = "git-branch-16"
+  case reviewRequestUnknown = "question-16"
+  case mergeQueue = "git-merge-queue-16"
 
   var image: NSImage {
     guard let url = Self.resourceBundle.url(forResource: rawValue, withExtension: "svg"),
@@ -47,6 +57,16 @@ enum Octicon: String, CaseIterable {
     case .checksPassed: "Checks passed"
     case .checksFailed: "Checks failed"
     case .checksRunning: "Checks running"
+    case .checksNeutral: "Checks neutral"
+    case .viewerApproved: "Approved by you"
+    case .viewerChangesRequested: "Changes requested by you"
+    case .reviewRerequested: "Review requested again"
+    case .newCommits: "New commits"
+    case .mergeConflict: "Merge conflicts"
+    case .conversations: "Unresolved conversations"
+    case .branchBehind: "Branch is behind"
+    case .reviewRequestUnknown: "Review request status unavailable"
+    case .mergeQueue: "Merge queue"
     }
   }
 }

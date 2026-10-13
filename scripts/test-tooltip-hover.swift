@@ -55,7 +55,7 @@ struct TooltipHoverTestRunner {
         // Centers of the fixed 11pt metadata slots; nil targets the native Details control.
         let probes: [(CGFloat?, String)] = [
           (18.5, "Approved"), (33.5, "Checks failed"),
-          (51.5, "Fix failing checks"), (nil, keys.help(for: .details)),
+          (51.5, "Resolve merge conflicts"), (nil, keys.help(for: .details)),
         ]
         for phase in ["initial", "reopened", "refreshed"] {
           if phase == "reopened" {
@@ -156,7 +156,7 @@ struct TooltipHoverTestRunner {
       additions: 1, deletions: 0, labels: [], requestedReviewers: [], viewerReviewState: nil,
       viewerReviewedHeadOID: nil, viewerReviewSubmittedAt: nil,
       hasCurrentApprovalFromOtherReviewer: false, stackPosition: nil, stackSize: nil,
-      viewerDidAuthor: true, mergeState: .clean, unresolvedConversationCount: 0, checks: nil,
+      viewerDidAuthor: true, mergeState: .conflicting, unresolvedConversationCount: 0, checks: nil,
       autoMergeEnabled: false, mergeQueuePosition: nil, lifecycleState: .open,
       viewerReviewRequested: false)
   }

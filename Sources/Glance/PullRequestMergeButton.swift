@@ -38,6 +38,7 @@ struct MergeActionTrigger: NSViewRepresentable {
   func updateNSView(_ button: Trigger, context: Context) {
     button.performAction = action
     button.isEnabled = control.action != nil && !isBusy
+    button.updateHoverHighlight()
     (button.cell as? NSButtonCell)?.imageDimsWhenDisabled = false
     let image = control.icon.image
     image.size = NSSize(width: 12, height: 12)
@@ -53,7 +54,41 @@ struct MergeActionTrigger: NSViewRepresentable {
   final class Trigger: NSButton {
     var performAction: (() -> Void)?
     private var handlingPointer = false
+    private var hovering = false
+    private var hoverArea: NSTrackingArea?
     override var acceptsFirstResponder: Bool { isEnabled && !handlingPointer }
+
+    /// Reveals that the status glyph is also a button; inert glyphs never highlight.
+    var showsHoverHighlight: Bool { hovering && isEnabled }
+
+    func updateHoverHighlight() {
+      wantsLayer = true
+      layer?.cornerRadius = 4
+      layer?.backgroundColor = showsHoverHighlight
+        ? NSColor.labelColor.withAlphaComponent(0.1).cgColor : nil
+    }
+
+    override func updateTrackingAreas() {
+      super.updateTrackingAreas()
+      // Only replace this area; tooltips rely on AppKit's own tracking.
+      if let hoverArea { removeTrackingArea(hoverArea) }
+      let area = NSTrackingArea(rect: .zero,
+        options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
+      addTrackingArea(area)
+      hoverArea = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+      super.mouseEntered(with: event)
+      hovering = true
+      updateHoverHighlight()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+      super.mouseExited(with: event)
+      hovering = false
+      updateHoverHighlight()
+    }
 
     @objc func activate() {
       guard isEnabled else { return }

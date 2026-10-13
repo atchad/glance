@@ -11,14 +11,78 @@ final class PullRequestRowTests: XCTestCase {
       ("CHANGES_REQUESTED", "Changes requested by you"),
       ("COMMENTED", nil), ("DISMISSED", nil), ("PENDING", nil), (nil, nil),
     ] as [(String?, String?)] {
-      let host = NSHostingView(rootView: rowView(makePullRequest(viewerReviewState: state), width: 400))
+      let host = NSHostingView(rootView: rowView(makePullRequest(viewerReviewState: state, authored: false), width: 400))
       _ = host.fittingSize
       host.layoutSubtreeIfNeeded()
       let captions = nativeTooltips(in: host)
       XCTAssertEqual(captions.contains("Approved by you"), caption == "Approved by you")
       XCTAssertEqual(captions.contains("Changes requested by you"), caption == "Changes requested by you")
-      // Personal and aggregate review status are independent.
-      XCTAssertTrue(captions.contains("Approved"))
+      // Your review replaces the aggregate decision in the one review slot.
+      XCTAssertEqual(captions.contains("Approved"), caption == nil)
+    }
+  }
+
+  func testReviewSlotFollowsTheReviewStatusSetting() {
+    var preferences = Preferences()
+    preferences.showReviewStatus = false
+    let host = NSHostingView(rootView: rowView(
+      makePullRequest(viewerReviewState: "APPROVED", authored: false), width: 400, preferences: preferences))
+    _ = host.fittingSize
+    host.layoutSubtreeIfNeeded()
+    XCTAssertFalse(nativeTooltips(in: host).contains("Approved by you"))
+  }
+
+  func testEachFactAppearsOnceOnTheRow() {
+    for checks: PullRequest.CheckState in [.failure, .pending] {
+      let host = NSHostingView(rootView: rowView(makePullRequest(checks: checks), width: 400))
+      _ = host.fittingSize
+      host.layoutSubtreeIfNeeded()
+      let captions = nativeTooltips(in: host)
+      XCTAssertEqual(captions.filter { $0.localizedCaseInsensitiveContains("checks") }.count, 1, "\(captions)")
+    }
+  }
+
+  func testReusedMergeTriggerKeepsOneHoverAreaAndTracksEnabledState() throws {
+    let pr = mergePullRequest()
+    let host = NSHostingView(rootView: PullRequestMergeButton(pullRequest: pr) {})
+    host.frame.size = host.fittingSize
+    let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+    window.contentView = host
+    defer { window.contentView = nil }
+    host.layoutSubtreeIfNeeded()
+    let button = try XCTUnwrap(mergeTriggers(in: host).first)
+    button.updateTrackingAreas()
+    button.updateTrackingAreas()
+    XCTAssertEqual(button.trackingAreas.filter { $0.owner === button && $0.options.contains(.mouseEnteredAndExited) }.count, 1)
+    button.mouseEntered(with: try XCTUnwrap(NSEvent.enterExitEvent(with: .mouseEntered, location: .zero,
+      modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil, eventNumber: 0, trackingNumber: 0,
+      userData: nil)))
+    XCTAssertTrue(button.showsHoverHighlight)
+    for (busy, highlights, caption) in [(true, false, "Enabling auto-merge…"), (false, true, "Enable auto-merge (squash)")] {
+      host.rootView = PullRequestMergeButton(pullRequest: pr, isBusy: busy) {}
+      host.layoutSubtreeIfNeeded()
+      XCTAssertTrue(try XCTUnwrap(mergeTriggers(in: host).first) === button, "The native trigger is reused")
+      XCTAssertEqual(button.showsHoverHighlight, highlights)
+      XCTAssertEqual(button.layer?.backgroundColor != nil, highlights)
+      XCTAssertEqual(button.toolTip, caption)
+    }
+  }
+
+  func testActionableMergeControlHighlightsOnHoverButInertOneDoesNot() throws {
+    for (pr, highlights) in [(mergePullRequest(), true), (mergePullRequest(lifecycle: .merged), false)] {
+      let host = NSHostingView(rootView: PullRequestMergeButton(pullRequest: pr) {})
+      _ = host.fittingSize
+      host.layoutSubtreeIfNeeded()
+      let button = try XCTUnwrap(mergeTriggers(in: host).first)
+      XCTAssertFalse(button.showsHoverHighlight)
+      button.mouseEntered(with: try XCTUnwrap(NSEvent.enterExitEvent(with: .mouseEntered, location: .zero,
+        modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil, eventNumber: 0, trackingNumber: 0,
+        userData: nil)))
+      XCTAssertEqual(button.showsHoverHighlight, highlights)
+      button.mouseExited(with: try XCTUnwrap(NSEvent.enterExitEvent(with: .mouseExited, location: .zero,
+        modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil, eventNumber: 0, trackingNumber: 0,
+        userData: nil)))
+      XCTAssertFalse(button.showsHoverHighlight)
     }
   }
 
@@ -26,7 +90,7 @@ final class PullRequestRowTests: XCTestCase {
     for width: CGFloat in [280, 360, 600] {
       let baseline = rowHeight(makePullRequest(), width: width)
       for state in ["APPROVED", "CHANGES_REQUESTED", "COMMENTED"] {
-        XCTAssertEqual(rowHeight(makePullRequest(viewerReviewState: state), width: width),
+        XCTAssertEqual(rowHeight(makePullRequest(viewerReviewState: state, authored: false), width: width),
           baseline, accuracy: 0.5)
       }
     }
@@ -47,12 +111,12 @@ final class PullRequestRowTests: XCTestCase {
 
   func testAttentionDoesNotAddHeightToRows() {
     for width: CGFloat in [280, 360, 600] {
-      for checks: PullRequest.CheckState in [.failure, .pending] {
-        let pullRequest = makePullRequest(checks: checks)
-        XCTAssertNotNil(pullRequest.rowAttention)
+      for mergeState: PullRequest.MergeState in [.conflicting, .behind] {
+        let pullRequest = makePullRequest(mergeState: mergeState)
+        XCTAssertNotNil(pullRequest.rowAttention())
         let withAttention = rowHeight(pullRequest, width: width, showsAttention: true)
         let withoutAttention = rowHeight(pullRequest, width: width, showsAttention: false)
-        XCTAssertEqual(withAttention, withoutAttention, accuracy: 0.5, "\(checks) at \(width)pt")
+        XCTAssertEqual(withAttention, withoutAttention, accuracy: 0.5, "\(mergeState) at \(width)pt")
       }
     }
   }
@@ -66,14 +130,14 @@ final class PullRequestRowTests: XCTestCase {
   }
 
   func testMetadataTooltipsRemainRegisteredAfterRowRedraws() {
-    let pullRequest = makePullRequest()
+    let pullRequest = makePullRequest(mergeState: .conflicting)
     let host = NSHostingView(rootView: rowView(pullRequest, width: 400))
     for selected in [false, true, false] {
       host.rootView = rowView(pullRequest, width: 400, isSelected: selected)
       _ = host.fittingSize
       host.layoutSubtreeIfNeeded()
       let tooltips = nativeTooltips(in: host)
-      for caption in ["Approved", "Checks failed", "Fix failing checks"] {
+      for caption in ["Approved", "Checks failed", "Resolve merge conflicts"] {
         XCTAssertTrue(tooltips.contains(caption), "Missing native tooltip: \(caption)")
       }
     }
@@ -197,9 +261,10 @@ final class PullRequestRowTests: XCTestCase {
   }
 
   private func rowView(
-    _ pullRequest: PullRequest, width: CGFloat, showsAttention: Bool = true, isSelected: Bool = false
+    _ pullRequest: PullRequest, width: CGFloat, showsAttention: Bool = true, isSelected: Bool = false,
+    preferences: Preferences = Preferences()
   ) -> some View {
-    var preferences = Preferences()
+    var preferences = preferences
     preferences.showAttentionReason = showsAttention
     let row = PullRequestRow(
       pullRequest: pullRequest, preferences: preferences,
@@ -211,7 +276,7 @@ final class PullRequestRowTests: XCTestCase {
 
   private func makePullRequest(
     title: String = "Fix checks", checks: PullRequest.CheckState = .failure,
-    viewerReviewState: String? = nil
+    viewerReviewState: String? = nil, authored: Bool = true, mergeState: PullRequest.MergeState = .clean
   ) -> PullRequest {
     PullRequest(
       id: "PR_1", number: 1, repository: "owner/repo", title: title, author: "author",
@@ -221,7 +286,7 @@ final class PullRequestRowTests: XCTestCase {
       additions: 1, deletions: 0, labels: [], requestedReviewers: [], viewerReviewState: viewerReviewState,
       viewerReviewedHeadOID: nil, viewerReviewSubmittedAt: nil,
       hasCurrentApprovalFromOtherReviewer: false, stackPosition: nil, stackSize: nil,
-      viewerDidAuthor: true, mergeState: .clean, unresolvedConversationCount: 0, checks: nil,
+      viewerDidAuthor: authored, mergeState: mergeState, unresolvedConversationCount: 0, checks: nil,
       autoMergeEnabled: false, mergeQueuePosition: nil, lifecycleState: .open,
       viewerReviewRequested: false)
   }

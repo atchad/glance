@@ -9,16 +9,23 @@ if [[ ! -f "$repo_root/support/Glance.icns" ]]; then
     "$repo_root/scripts/build-assets.sh" >/dev/null
 fi
 
-build_arguments=(-c "$configuration")
-if [[ -n "${GLANCE_SDK_PATH:-}" ]]; then
-    build_arguments+=(--sdk "$GLANCE_SDK_PATH")
-fi
+build_arguments=(--build-system native -c "$configuration")
+build_arguments+=(--sdk "${GLANCE_SDK_PATH:-$(xcrun --show-sdk-path)}")
+universal_binaries=()
 if [[ "$configuration" == "release" && "${GLANCE_UNIVERSAL_BUILD:-1}" != "0" ]]; then
-    build_arguments+=(--arch arm64 --arch x86_64)
+    # Multiple --arch flags select SwiftPM's Xcode backend, which can stamp the
+    # deployment target as the SDK version and disable the current native UI.
+    # Build each slice with the native backend, then combine the executables.
+    for architecture in arm64 x86_64; do
+        slice_arguments=("${build_arguments[@]}" --triple "$architecture-apple-macosx14.0")
+        swift build "${slice_arguments[@]}"
+        universal_binaries+=("$(swift build "${slice_arguments[@]}" --show-bin-path)/Glance")
+    done
+    binary_path="$universal_binaries[1]"
+else
+    swift build "${build_arguments[@]}"
+    binary_path="$(swift build "${build_arguments[@]}" --show-bin-path)/Glance"
 fi
-
-swift build "${build_arguments[@]}"
-binary_path="$(swift build "${build_arguments[@]}" --show-bin-path)/Glance"
 binary_directory="${binary_path:h}"
 app_path="$repo_root/dist/Glance.app"
 contents_path="$app_path/Contents"
@@ -29,7 +36,11 @@ sparkle_license="$repo_root/.build/artifacts/sparkle/Sparkle/LICENSE"
 
 rm -rf "$app_path"
 mkdir -p "$contents_path/MacOS" "$contents_path/Resources" "$frameworks_path"
-cp "$binary_path" "$contents_path/MacOS/Glance"
+if (( ${#universal_binaries[@]} > 0 )); then
+    lipo -create "${universal_binaries[@]}" -output "$contents_path/MacOS/Glance"
+else
+    cp "$binary_path" "$contents_path/MacOS/Glance"
+fi
 cp -R "$binary_directory/Glance_Glance.bundle" "$contents_path/Resources/Glance_Glance.bundle"
 cp "$repo_root/support/Info.plist" "$contents_path/Info.plist"
 cp "$repo_root/support/Glance.icns" "$contents_path/Resources/Glance.icns"

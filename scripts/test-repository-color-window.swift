@@ -33,6 +33,13 @@ struct RepositoryColorWindowTestRunner {
       }
       checks += 1
     }
+    if #available(macOS 15, *) {
+      let firstToolbar = NSToolbar(identifier: "FirstSettingsToolbar")
+      let firstToggle = NSToolbarItem(itemIdentifier: .toggleSidebar)
+      NotificationCenter.default.post(name: NSToolbar.willAddItemNotification,
+        object: firstToolbar, userInfo: ["item": firstToggle])
+      check(firstToggle.isHidden, "Hide the first sidebar toggle before Settings lays out its toolbar.")
+    }
     for repository in ["Owner/Repo", "Other/Repo", "Other/Repo"] {
       settings.navigation.category = .general
       commands.showRepositoryColors(for: repository)
@@ -48,6 +55,26 @@ struct RepositoryColorWindowTestRunner {
         "Each link must select the requested repository.")
       check(store.preferences.repositoryColor(for: repository) != nil,
         "Assign a color before showing its editor.")
+    }
+    if #available(macOS 15, *),
+      let toolbar = app.windows.first(where: { $0.title == SettingsCategory.repoColors.title })?.toolbar
+    {
+      // Model SwiftUI's pre-insertion notification without advancing the run loop:
+      // deferred removal alone would leave these items visible for one frame.
+      for identifier in [NSToolbarItem.Identifier.toggleSidebar,
+        NSToolbarItem.Identifier("com.apple.SwiftUI.navigationSplitView.toggleSidebar")]
+      {
+        let item = NSToolbarItem(itemIdentifier: identifier)
+        NotificationCenter.default.post(name: NSToolbar.willAddItemNotification,
+          object: toolbar, userInfo: ["item": item])
+        check(item.isHidden, "A reinserted sidebar toggle must be hidden before the next frame.")
+      }
+      let unrelatedItem = NSToolbarItem(itemIdentifier: .flexibleSpace)
+      NotificationCenter.default.post(name: NSToolbar.willAddItemNotification,
+        object: toolbar, userInfo: ["item": unrelatedItem])
+      check(!unrelatedItem.isHidden, "Other toolbar items must remain visible.")
+    } else if #available(macOS 15, *) {
+      check(false, "Settings must provide a toolbar for sidebar-toggle checks.")
     }
     print("Passed \(checks) repository color window checks.")
   }

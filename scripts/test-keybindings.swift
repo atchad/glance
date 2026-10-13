@@ -27,7 +27,7 @@ struct KeybindingTests {
     }
     let defaults = try ResolvedKeybindings(KeybindingConfiguration())
     try check(defaults.globalHotkey?.text == "ctrl+shift+space", "default global hotkey")
-    try check(defaults.bindings.count == 32, "all default alternatives compile")
+    try check(defaults.bindings.count == 33, "all default alternatives compile")
     try check(try KeyChord("SHIFT+CTRL+space") == KeyChord("ctrl+shift+space"), "modifier order and case")
     let global = try KeyChord("ctrl+shift+space")
     let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.control, .shift],
@@ -80,6 +80,10 @@ struct KeybindingTests {
 
     var matcher = KeybindingMatcher()
     try check(matcher.handle(KeyChord("j"), at: 0, bindings: defaults) == .action(.nextPR), "direct action")
+    try check(matcher.handle(KeyChord("cmd+f"), at: 0, bindings: defaults) == .action(.search), "Command-F focuses search")
+    let commandF = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.command],
+      timestamp: 0, windowNumber: 0, context: nil, characters: "f", charactersIgnoringModifiers: "f", isARepeat: false, keyCode: 3)!
+    try check(KeyChord(event: commandF) == (try KeyChord("cmd+f")), "native Command-F event matches binding")
     try check(matcher.handle(KeyChord("p"), at: 0, bindings: defaults, isRepeat: true) == .consumed, "holding a key cannot repeat pin/dismiss actions")
     try check(matcher.handle(KeyChord("j"), at: 0, bindings: defaults, isRepeat: true) == .action(.nextPR), "holding a custom navigation key can repeat navigation")
     try check(matcher.handle(KeyChord("a"), at: 0, bindings: defaults, textEditing: true, isRepeat: true) == .ignored, "held text keys stay native")

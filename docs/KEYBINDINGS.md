@@ -25,7 +25,7 @@ These commands work in the dashboard panel, opened by either the menu-bar icon o
 | --- | --- |
 | Next / previous PR | `j` / `k`, Down / Up |
 | First / last PR | `g g` / `shift+g` |
-| Focus / clear search | `/` / `shift+/` |
+| Focus / clear search | `/` or `cmd+f` / `shift+/` |
 | Open / details | Return / `i` |
 | Dismiss / undo dismissal | `d` / `u` or `cmd+z` |
 | Pin or unpin | `p` |

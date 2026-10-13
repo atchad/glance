@@ -2,6 +2,10 @@ name: CI
 
 on:
   pull_request:
+  # Default-branch caches are available to new PRs and release tags. PR caches
+  # are scoped to their merge ref and cannot seed trusted release builds.
+  push:
+    branches: [main]
 
 permissions:
   contents: read

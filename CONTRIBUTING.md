@@ -49,7 +49,8 @@ lipo dist/Glance.app/Contents/MacOS/Glance -verify_arch arm64 x86_64
 and shares them with the bundled integration runners. `--unit-only` runs XCTest and
 script checks without the bundled window runners. CI caches debug and universal
 release builds using the Xcode/Swift/SDK identity and package/input hashes; every
-run still executes the tests and verifies the freshly packaged app.
+run still executes the tests and verifies the freshly packaged app. Pushes to
+`main` populate the trusted cache that new PRs and release tags can restore.
 
 Local application bundles receive an ad-hoc signature without hardened runtime when a Developer ID identity is not available. This allows macOS to load bundled frameworks that have no Team ID. Certificate-signed builds keep hardened runtime and timestamping. You do not need the maintainer's signing or notarization credentials to contribute.
 

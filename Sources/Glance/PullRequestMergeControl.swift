@@ -29,7 +29,7 @@ struct PullRequestMergeResult {
 
 /// GitHub's mergeability status is authoritative; aggregate checks cannot identify required checks.
 struct PullRequestMergeControl {
-  enum State { case open, autoMergeEnabled, ready, merged, closed, draft, unknown }
+  enum State { case open, autoMergeEnabled, queued, ready, merged, closed, draft, unknown }
 
   let pullRequest: PullRequest
 
@@ -40,6 +40,7 @@ struct PullRequestMergeControl {
     guard pullRequest.lifecycleState == .open else { return .unknown }
     if pullRequest.isMergeable == true, pullRequest.mergeState == .clean,
       pullRequest.mergeQueuePosition == nil { return .ready }
+    if pullRequest.mergeQueuePosition != nil { return .queued }
     if pullRequest.autoMergeEnabled == true { return .autoMergeEnabled }
     return .open
   }
@@ -51,6 +52,9 @@ struct PullRequestMergeControl {
     switch state {
     case .autoMergeEnabled:
       return capabilities.viewerCanDisableAutoMerge == true ? .disableAutoMerge : nil
+    case .queued:
+      return pullRequest.autoMergeEnabled == true && capabilities.viewerCanDisableAutoMerge == true
+        ? .disableAutoMerge : nil
     case .draft:
       return pullRequest.lifecycleState == .open && capabilities.viewerCanMarkReadyForReview == true
         ? .markReadyForReview : nil
@@ -58,7 +62,7 @@ struct PullRequestMergeControl {
       return hasMergeInputs && capabilities.viewerCanMerge ? .merge : nil
     case .open:
       return hasMergeInputs && capabilities.autoMergeAllowed && capabilities.viewerCanEnableAutoMerge
-        && pullRequest.mergeQueuePosition == nil ? .enableAutoMerge : nil
+        ? .enableAutoMerge : nil
     default: return nil
     }
   }
@@ -66,6 +70,7 @@ struct PullRequestMergeControl {
   var icon: Octicon {
     switch state {
     case .ready, .merged: .merged
+    case .queued: .mergeQueue
     case .draft: .draft
     case .closed: .closed
     default: .pullRequest
@@ -74,7 +79,7 @@ struct PullRequestMergeControl {
 
   var color: Color {
     switch state {
-    case .autoMergeEnabled, .ready: .statusGreen
+    case .autoMergeEnabled, .queued, .ready: .statusGreen
     case .merged: .purple
     case .closed: .red
     default: .secondary
@@ -93,8 +98,10 @@ struct PullRequestMergeControl {
       return action == .disableAutoMerge ? "Disable auto-merge" : "Auto-merge enabled · disable permission unavailable"
     case .ready:
       return action == .merge ? "Merge pull request (\(method))" : "Ready to merge · merge permission unavailable"
+    case .queued:
+      let queue = pullRequest.mergeQueuePosition.map { "Merge queue · position \($0)" } ?? "Merge queue"
+      return action == .disableAutoMerge ? "\(queue) · Disable auto-merge" : queue
     case .open:
-      if pullRequest.mergeQueuePosition != nil { return "Pull request is in the merge queue" }
       guard let capabilities = pullRequest.mergeCapabilities else {
         return "Refresh to load merge availability"
       }

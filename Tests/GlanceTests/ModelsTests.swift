@@ -105,18 +105,136 @@ final class ModelsTests: XCTestCase {
   func testRowsOmitReviewRequestsDraftsAndGenericActivity() {
     let requested = makePullRequest(reviewers: ["atchad"])
     XCTAssertEqual(requested.attention.message, "Review requested")
-    XCTAssertNil(requested.rowAttention)
-    XCTAssertNil(makePullRequest(isDraft: true).rowAttention)
+    XCTAssertNil(requested.rowAttention())
+    XCTAssertNil(makePullRequest(isDraft: true).rowAttention())
     let active = makePullRequest(viewerDidAuthor: true)
     XCTAssertEqual(active.attention.reason, .active)
-    XCTAssertNil(active.rowAttention)
+    XCTAssertNil(active.rowAttention())
 
     let rerequested = makePullRequest(
       reviewers: ["atchad"], reviewRequestedAt: Date(timeIntervalSince1970: 3),
       viewerReviewState: "COMMENTED", viewerReviewSubmittedAt: Date(timeIntervalSince1970: 2))
-    XCTAssertEqual(rerequested.rowAttention?.message, "Review requested again")
+    XCTAssertEqual(rerequested.rowAttention()?.help, "Review requested again")
     let conversation = makePullRequest(viewerDidAuthor: true, unresolvedConversationCount: 1)
-    XCTAssertEqual(conversation.rowAttention?.message, "Resolve 1 conversation")
+    XCTAssertEqual(conversation.rowAttention()?.help, "Resolve 1 conversation")
+  }
+
+  func testRowAttentionDefersToVisibleReviewAndCheckSlots() {
+    var preferences = Preferences()
+    for (pr, owner) in [
+      (makePullRequest(checks: .failure, viewerDidAuthor: true), \Preferences.showCheckStatus),
+      (makePullRequest(checks: .pending, viewerDidAuthor: true), \Preferences.showCheckStatus),
+      (makePullRequest(reviewDecision: "CHANGES_REQUESTED", viewerDidAuthor: true), \Preferences.showReviewStatus),
+      (makePullRequest(reviewDecision: "REVIEW_REQUIRED", viewerDidAuthor: true), \Preferences.showReviewStatus),
+    ] {
+      preferences[keyPath: owner] = true
+      XCTAssertNil(pr.rowAttention(for: preferences), "\(pr.attention.reason) is already shown by its slot")
+      preferences[keyPath: owner] = false
+      let glyph = pr.rowAttention(for: preferences)
+      XCTAssertEqual(glyph?.help, pr.attention.message)
+      XCTAssertEqual(glyph?.icon, pr.attention.reason.icon)
+      preferences[keyPath: owner] = true
+    }
+    preferences.showCheckStatus = false
+    XCTAssertEqual(makePullRequest(checks: .failure, viewerDidAuthor: true).rowAttention(for: preferences)?.icon,
+      PullRequest.CheckState.failure.glyph?.icon, "A fact keeps its glyph when it moves slots")
+  }
+
+  func testSlotOwnedReasonsYieldToLowerPriorityReasonsOnlyWhileTheirSlotIsVisible() {
+    var preferences = Preferences()
+    for (pr, owner, hidden, visible) in [
+      (makePullRequest(reviewDecision: "CHANGES_REQUESTED", viewerDidAuthor: true, mergeState: .conflicting),
+        \Preferences.showReviewStatus, "Changes requested", "Resolve merge conflicts"),
+      (makePullRequest(checks: .failure, viewerDidAuthor: true, unresolvedConversationCount: 1),
+        \Preferences.showCheckStatus, "Fix failing checks", "Resolve 1 conversation"),
+    ] {
+      let canonical = pr.attention
+      XCTAssertEqual(canonical.message, hidden)
+      preferences[keyPath: owner] = true
+      XCTAssertEqual(pr.rowAttention(for: preferences)?.help, visible)
+      preferences[keyPath: owner] = false
+      XCTAssertEqual(pr.rowAttention(for: preferences)?.help, hidden)
+      preferences[keyPath: owner] = true
+      XCTAssertEqual(pr.attention, canonical, "Row preferences never change canonical attention")
+    }
+  }
+
+  func testRowAttentionFallsThroughToTheNextReasonWithAGlyph() {
+    let requested = makePullRequest(reviewers: ["atchad"], mergeState: .conflicting)
+    XCTAssertEqual(requested.attention.reason, .reviewRequested)
+    XCTAssertEqual(requested.rowAttention()?.help, "Resolve merge conflicts")
+    XCTAssertEqual(requested.rowAttention()?.icon, .mergeConflict)
+    XCTAssertEqual(requested.rowAttention()?.color, .red)
+
+    let draft = makePullRequest(viewerDidAuthor: true, mergeState: .conflicting, isDraft: true)
+    XCTAssertEqual(draft.attention.reason, .draft)
+    XCTAssertEqual(draft.rowAttention()?.icon, .mergeConflict)
+
+    let behindAndQueued = makePullRequest(viewerDidAuthor: true, mergeState: .behind, mergeQueuePosition: 1)
+    XCTAssertEqual(behindAndQueued.rowAttention()?.icon, .branchBehind)
+    XCTAssertNil(makePullRequest(viewerDidAuthor: true, mergeQueuePosition: 1).rowAttention(),
+      "The merge control owns the merge queue")
+
+    for lifecycle: PullRequest.LifecycleState in [.merged, .closed] {
+      XCTAssertNil(makePullRequest(checks: .failure, viewerDidAuthor: true, mergeState: .conflicting,
+        lifecycleState: lifecycle).rowAttention(), "Finished PRs show no stale blockers")
+    }
+  }
+
+  func testEveryRowAttentionReasonHasItsOwnGlyph() {
+    let reasons: [PRAttentionReason] = [
+      .reviewRequestUnknown, .reviewRequested, .reviewRerequested, .commitsSinceReview, .changesRequested,
+      .unresolvedConversations, .checksFailing, .checksPending, .mergeConflict, .branchBehind,
+      .waitingForReviews, .readyToMerge, .autoMerge, .mergeQueue, .draft, .merged, .closed, .active,
+    ]
+    let icons = reasons.compactMap(\.icon)
+    XCTAssertEqual(Set(icons).count, icons.count)
+    XCTAssertEqual(Set(reasons.filter { $0.icon == nil }),
+      [.reviewRequested, .readyToMerge, .autoMerge, .mergeQueue, .draft, .merged, .closed, .active])
+  }
+
+  func testReviewSlotShowsYourReviewOnOthersPullRequestsAndTheDecisionOnYours() {
+    let approvedByYou = makePullRequest(viewerReviewState: "APPROVED", reviewDecision: "CHANGES_REQUESTED")
+    XCTAssertEqual(approvedByYou.reviewGlyph, RowGlyph(icon: .viewerApproved, help: "Approved by you", color: .secondary))
+    let blockedByYou = makePullRequest(viewerReviewState: "CHANGES_REQUESTED", reviewDecision: "CHANGES_REQUESTED")
+    XCTAssertEqual(blockedByYou.reviewGlyph,
+      RowGlyph(icon: .viewerChangesRequested, help: "Changes requested by you", color: .red))
+    let commented = makePullRequest(viewerReviewState: "COMMENTED", reviewDecision: "APPROVED")
+    XCTAssertEqual(commented.reviewGlyph, RowGlyph(icon: .approved, help: "Approved", color: .secondary))
+    let yours = makePullRequest(viewerReviewState: "APPROVED", reviewDecision: "CHANGES_REQUESTED", viewerDidAuthor: true)
+    XCTAssertEqual(yours.reviewGlyph, RowGlyph(icon: .changesRequested, help: "Changes requested", color: .red))
+    XCTAssertEqual(makePullRequest(reviewDecision: "REVIEW_REQUIRED").reviewGlyph,
+      RowGlyph(icon: .reviewPending, help: "Review pending", color: .secondary))
+    XCTAssertNil(makePullRequest(reviewDecision: nil).reviewGlyph)
+  }
+
+  func testRequestedPeerReviewsTurnYourPendingDotYellow() {
+    let requested = makePullRequest(reviewers: ["alice", "platform-team"], reviewDecision: "REVIEW_REQUIRED",
+      viewerDidAuthor: true)
+    XCTAssertEqual(requested.reviewGlyph,
+      RowGlyph(icon: .reviewPending, help: "Awaiting review from alice, platform-team", color: .yellow))
+    let optional = makePullRequest(reviewers: ["alice"], reviewDecision: nil, viewerDidAuthor: true)
+    XCTAssertEqual(optional.reviewGlyph?.color, .yellow, "Requests count even when reviews aren't required")
+    let nobodyAsked = makePullRequest(reviewDecision: "REVIEW_REQUIRED", viewerDidAuthor: true)
+    XCTAssertEqual(nobodyAsked.reviewGlyph,
+      RowGlyph(icon: .reviewPending, help: "Review pending", color: .secondary))
+    let approved = makePullRequest(reviewers: ["bob"], reviewDecision: "APPROVED", viewerDidAuthor: true)
+    XCTAssertEqual(approved.reviewGlyph?.icon, .approved, "A decision outranks outstanding requests")
+    let theirs = makePullRequest(reviewers: ["alice"], reviewDecision: "REVIEW_REQUIRED")
+    XCTAssertEqual(theirs.reviewGlyph?.color, .secondary, "Only your own PRs show peer requests")
+  }
+
+  func testRowColorIsReservedForBlockersAndYourTurn() {
+    XCTAssertEqual(PullRequest.CheckState.success.glyph?.color, .secondary)
+    XCTAssertEqual(PullRequest.CheckState.pending.glyph?.color, .secondary)
+    XCTAssertEqual(PullRequest.CheckState.neutral.glyph?.icon, .checksNeutral)
+    XCTAssertEqual(PullRequest.CheckState.neutral.glyph?.color, .secondary)
+    XCTAssertEqual(PullRequest.CheckState.failure.glyph?.color, .red)
+    XCTAssertNil(PullRequest.CheckState.unknown.glyph)
+    let newCommits = makePullRequest(headRefOID: "new", viewerReviewState: "APPROVED", viewerReviewedHeadOID: "old")
+    XCTAssertEqual(newCommits.rowAttention(), RowGlyph(icon: .newCommits, help: "New commits since your review", color: .orange))
+    let othersConversation = makePullRequest(unresolvedConversationCount: 2)
+    XCTAssertEqual(othersConversation.rowAttention()?.color, .secondary)
   }
 
   func testRowTimeFallsBackToCreationWithoutAPersonalRequestDate() {

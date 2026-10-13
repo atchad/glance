@@ -151,6 +151,24 @@ struct PullRequest: Codable, Identifiable, Hashable {
   }
 
   var attention: PRAttentionSummary {
+    attentionReasons.first
+      ?? .init(level: .informational, reason: .active, message: "Active", priority: 800)
+  }
+
+  /// One glyph per fact: reasons owned by a visible review or check slot, or by the merge
+  /// control, never repeat in the attention slot; the next reason with a glyph shows instead.
+  func rowAttention(for preferences: Preferences = .default) -> RowGlyph? {
+    attentionReasons.lazy.filter { summary in
+      switch summary.reason {
+      case .checksFailing, .checksPending: !preferences.showCheckStatus
+      case .changesRequested, .waitingForReviews: !preferences.showReviewStatus
+      default: true
+      }
+    }.compactMap(\.glyph).first
+  }
+
+  /// Every applicable reason, most urgent first.
+  private var attentionReasons: [PRAttentionSummary] {
     let authored = viewerDidAuthor == true
     let reviewWasRerequested = personalReviewRequestedAt.map { requestedAt in
       viewerReviewSubmittedAt.map { requestedAt > $0 } ?? false
@@ -158,113 +176,157 @@ struct PullRequest: Codable, Identifiable, Hashable {
     let changedSinceReview = viewerReviewedHeadOID.map { $0 != headRefOID } ?? false
 
     if lifecycleState == .merged {
-      return .init(level: .informational, reason: .merged, message: "Merged", priority: 950)
+      return [.init(level: .informational, reason: .merged, message: "Merged", priority: 950)]
     }
     if lifecycleState == .closed {
-      return .init(level: .informational, reason: .closed, message: "Closed", priority: 960)
+      return [.init(level: .informational, reason: .closed, message: "Closed", priority: 960)]
     }
+    var reasons: [PRAttentionSummary] = []
     if isDraft {
-      return .init(level: .informational, reason: .draft, message: "Draft", priority: 900)
+      reasons.append(.init(level: .informational, reason: .draft, message: "Draft", priority: 900))
     }
     if !authored, viewerReviewRequested == true, reviewWasRerequested {
-      return .init(
+      reasons.append(.init(
         level: .actionRequired, reason: .reviewRerequested,
-        message: "Review requested again", priority: 10)
+        message: "Review requested again", priority: 10))
     }
     if !authored, changedSinceReview, viewerReviewState != nil {
-      return .init(
+      reasons.append(.init(
         level: .actionRequired, reason: .commitsSinceReview,
-        message: "New commits since your review", priority: 20)
+        message: "New commits since your review", priority: 20))
     }
     if !authored, viewerReviewRequested == true {
-      return .init(
+      reasons.append(.init(
         level: .actionRequired, reason: .reviewRequested,
-        message: "Review requested", priority: 30)
+        message: "Review requested", priority: 30))
     }
     if authored, reviewDecision == "CHANGES_REQUESTED" {
-      return .init(
+      reasons.append(.init(
         level: .actionRequired, reason: .changesRequested,
-        message: "Changes requested", priority: 40)
+        message: "Changes requested", priority: 40))
     }
     if mergeState == .conflicting {
-      return .init(
+      reasons.append(.init(
         level: .actionRequired, reason: .mergeConflict,
-        message: "Resolve merge conflicts", priority: 50)
+        message: "Resolve merge conflicts", priority: 50))
     }
     if checksState == .failure {
       let count = checks?.filter { $0.state == .failure }.count ?? 0
       let message = count > 1 && checkDetailsComplete == true ? "Fix \(count) failing checks" : "Fix failing checks"
-      return .init(level: .actionRequired, reason: .checksFailing, message: message, priority: 60)
+      reasons.append(.init(level: .actionRequired, reason: .checksFailing, message: message, priority: 60))
     }
     if let count = unresolvedConversationCount, count > 0 {
       let noun = count == 1 ? "conversation" : "conversations"
       let message = authored ? "Resolve \(count) \(noun)" : "\(count) unresolved \(noun)"
-      return .init(
+      reasons.append(.init(
         level: authored ? .actionRequired : .waiting, reason: .unresolvedConversations,
-        message: message, priority: 70)
+        message: message, priority: 70))
     }
     if mergeState == .behind {
-      return .init(
+      reasons.append(.init(
         level: authored ? .actionRequired : .waiting, reason: .branchBehind,
-        message: "Branch is behind", priority: 80)
+        message: "Branch is behind", priority: 80))
     }
     if checksState == .pending {
-      return .init(level: .waiting, reason: .checksPending, message: "Checks running", priority: 100)
+      reasons.append(.init(level: .waiting, reason: .checksPending, message: "Checks running", priority: 100))
     }
     if let position = mergeQueuePosition {
-      return .init(
+      reasons.append(.init(
         level: .waiting, reason: .mergeQueue,
-        message: "Merge queue · position \(position)", priority: 110)
+        message: "Merge queue · position \(position)", priority: 110))
     }
     if autoMergeEnabled == true {
-      return .init(
-        level: .waiting, reason: .autoMerge, message: "Auto-merge enabled", priority: 120)
+      reasons.append(.init(
+        level: .waiting, reason: .autoMerge, message: "Auto-merge enabled", priority: 120))
     }
     if authored, reviewDecision == "REVIEW_REQUIRED" {
-      return .init(
+      reasons.append(.init(
         level: .waiting, reason: .waitingForReviews,
-        message: "Waiting for reviews", priority: 130)
+        message: "Waiting for reviews", priority: 130))
     }
     if authored, reviewDecision == "APPROVED", checksState == .success,
       mergeState == .clean || mergeState == nil
     {
-      return .init(
-        level: .ready, reason: .readyToMerge, message: "Ready to merge", priority: 140)
+      reasons.append(.init(
+        level: .ready, reason: .readyToMerge, message: "Ready to merge", priority: 140))
     }
     if !authored, viewerReviewRequested == nil {
-      return .init(level: .waiting, reason: .reviewRequestUnknown,
-        message: "Review request status unavailable", priority: 150)
+      reasons.append(.init(level: .waiting, reason: .reviewRequestUnknown,
+        message: "Review request status unavailable", priority: 150))
     }
-    return .init(level: .informational, reason: .active, message: "Active", priority: 800)
+    return reasons
   }
 
-  // Review requests are implied by the section; lifecycle/merge status lives beside the PR number.
-  var rowAttention: PRAttentionSummary? {
-    let attention = attention
-    switch attention.reason {
-    case .reviewRequested, .draft, .active, .readyToMerge, .autoMerge, .merged, .closed: return nil
-    default: return attention
+  /// Your own review on someone else's PR; otherwise GitHub's aggregate decision.
+  var reviewGlyph: RowGlyph? {
+    if viewerDidAuthor != true {
+      switch viewerReviewState {
+      case "APPROVED": return RowGlyph(icon: .viewerApproved, help: "Approved by you", color: .secondary)
+      case "CHANGES_REQUESTED":
+        return RowGlyph(icon: .viewerChangesRequested, help: "Changes requested by you", color: .red)
+      default: break
+      }
+    }
+    switch reviewDecision {
+    case "APPROVED": return RowGlyph(icon: .approved, help: "Approved", color: .secondary)
+    case "CHANGES_REQUESTED": return RowGlyph(icon: .changesRequested, help: "Changes requested", color: .red)
+    default:
+      // Yellow: you asked peers for review and are waiting on them.
+      if viewerDidAuthor == true, !requestedReviewers.isEmpty {
+        return RowGlyph(icon: .reviewPending,
+          help: "Awaiting review from \(requestedReviewers.joined(separator: ", "))", color: .yellow)
+      }
+      return reviewDecision == "REVIEW_REQUIRED"
+        ? RowGlyph(icon: .reviewPending, help: "Review pending", color: .secondary) : nil
+    }
+  }
+}
+
+/// Row color is reserved for blockers (red), your turn (orange), and peers you asked to review
+/// (yellow); other healthy and waiting states are muted.
+struct RowGlyph: Equatable {
+  let icon: Octicon
+  let help: String
+  let color: Color
+}
+
+extension PullRequest.CheckState {
+  var glyph: RowGlyph? {
+    switch self {
+    case .success: RowGlyph(icon: .checksPassed, help: "Checks passed", color: .secondary)
+    case .failure: RowGlyph(icon: .checksFailed, help: "Checks failed", color: .red)
+    case .pending: RowGlyph(icon: .checksRunning, help: "Checks running", color: .secondary)
+    case .neutral: RowGlyph(icon: .checksNeutral, help: "Checks neutral", color: .secondary)
+    case .unknown: nil
     }
   }
 }
 
 enum PRAttentionLevel: String, Codable {
   case actionRequired, waiting, ready, informational
-
-  var color: Color {
-    switch self {
-    case .actionRequired: .orange
-    case .waiting: .secondary
-    case .ready: .statusGreen
-    case .informational: .secondary
-    }
-  }
 }
 
 enum PRAttentionReason: String, Codable {
   case reviewRequestUnknown, reviewRequested, reviewRerequested, commitsSinceReview, changesRequested
   case unresolvedConversations, checksFailing, checksPending, mergeConflict, branchBehind
   case waitingForReviews, readyToMerge, autoMerge, mergeQueue, draft, merged, closed, active
+
+  /// Nil for reasons the section, merge control, or lifecycle already convey.
+  var icon: Octicon? {
+    switch self {
+    case .reviewRerequested: .reviewRerequested
+    case .commitsSinceReview: .newCommits
+    case .changesRequested: .changesRequested
+    case .mergeConflict: .mergeConflict
+    case .checksFailing: .checksFailed
+    case .checksPending: .checksRunning
+    case .unresolvedConversations: .conversations
+    case .branchBehind: .branchBehind
+    case .waitingForReviews: .reviewPending
+    case .reviewRequestUnknown: .reviewRequestUnknown
+    case .reviewRequested, .readyToMerge, .autoMerge, .mergeQueue, .draft, .merged, .closed, .active: nil
+    }
+  }
 }
 
 struct PRAttentionSummary: Equatable {
@@ -272,6 +334,17 @@ struct PRAttentionSummary: Equatable {
   let reason: PRAttentionReason
   let message: String
   let priority: Int
+
+  var glyph: RowGlyph? {
+    reason.icon.map { icon in
+      let color: Color = switch (reason, level) {
+      case (.changesRequested, _), (.checksFailing, _), (.mergeConflict, _): .red
+      case (_, .actionRequired): .orange
+      default: .secondary
+      }
+      return RowGlyph(icon: icon, help: message, color: color)
+    }
+  }
 }
 
 enum PRSortMode: String, Codable, CaseIterable, Identifiable {

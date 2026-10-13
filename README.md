@@ -95,9 +95,24 @@ Glance starts with sections for pull requests requesting your review and pull re
 - Adjust row details, including optional additions and deletions, review and check status icons,
   and completed-review filtering. Each row shows the time elapsed since the PR was created or
   your review was requested, such as 5m, 3h, or 2d.
-- Rows stay two lines: metadata above a single-line title. Attention reasons appear as icons
-  between the status icons and repository name; hover over an icon for its caption. Open Details
-  to read or copy a full title when it is truncated.
+- Rows stay two lines: metadata above a single-line title. Open Details to read or copy a full
+  title when it is truncated. Hover over any icon for its caption.
+
+### Row icons
+
+Each fact appears once, always with the same icon. Color is reserved: red means the PR is
+blocked, orange means it is your turn, yellow means you are waiting on reviewers you requested,
+and green or purple on the merge icon means it will merge or has merged. Everything else is muted.
+
+- **Review:** on someone else's PR, your own approval or requested changes; otherwise GitHub's
+  overall decision (approved, changes requested, or review pending). On your own PR, the pending
+  dot turns yellow while review requests are outstanding; hover to see who you're waiting on.
+- **Checks:** passed, failed, running, or neutral.
+- **Attention:** the most urgent remaining reason, such as a repeated review request, new commits
+  since your review, merge conflicts, unresolved conversations, or a branch that is behind. Reasons
+  already shown by the review, check, or merge icon are skipped, so the next reason appears
+  instead. Hiding the check icon in Settings moves failing or running checks here; hiding the
+  review icon does the same for requested changes and pending reviews on your own PRs.
 
 Click a pull request to open it in the application selected in Settings → General → Links.
 Its context menu can also copy the URL or branch name.
@@ -110,7 +125,11 @@ The icon beside each PR number combines merge status and actions:
 - **Draft PR icon:** click to mark the PR ready for review when you are its author or have write access.
 - **Green PR icon:** auto-merge is enabled. Click to disable it and return the icon to gray.
 - **Green merge icon:** GitHub reports the PR is ready to merge. Click to merge immediately.
+- **Green merge-queue icon:** the PR is in the merge queue; hover for its position. If auto-merge
+  is also enabled, click to disable it.
 - **Purple merge icon:** the PR has merged; the icon is no longer actionable.
+
+Clickable icons highlight on hover; status-only icons do not.
 
 When the repository disables auto-merge, hovering shows **“Auto-merge disabled in this repo”**.
 Drafts and closed PRs retain their own icons and cannot be merged directly from Glance. Publishing

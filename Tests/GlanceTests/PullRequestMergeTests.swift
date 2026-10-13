@@ -55,7 +55,7 @@ final class PullRequestMergeTests: XCTestCase {
     XCTAssertEqual(control.color, .purple)
     XCTAssertNil(control.action)
     XCTAssertEqual(control.help, "Merged")
-    XCTAssertNil(pr.rowAttention, "The identity control replaces the old merged attention icon")
+    XCTAssertNil(pr.rowAttention(), "The identity control replaces the old merged attention icon")
   }
 
   func testDisabledRepositoryUsesExactTooltipButStillAllowsDirectMerge() {
@@ -125,10 +125,24 @@ final class PullRequestMergeTests: XCTestCase {
     XCTAssertNotEqual(PullRequestMergeControl(pullRequest: queued).state, .ready)
   }
 
+  func testMergeControlOwnsTheMergeQueue() {
+    let control = PullRequestMergeControl(pullRequest: mergePullRequest(queuePosition: 2))
+    XCTAssertEqual(control.state, .queued)
+    XCTAssertEqual(control.icon, .mergeQueue)
+    XCTAssertEqual(control.color, .statusGreen)
+    XCTAssertNil(control.action)
+    XCTAssertEqual(control.help, "Merge queue · position 2")
+    let autoMerge = PullRequestMergeControl(pullRequest: mergePullRequest(autoMerge: true, queuePosition: 2))
+    XCTAssertEqual(autoMerge.state, .queued)
+    XCTAssertEqual(autoMerge.action, .disableAutoMerge)
+    XCTAssertEqual(autoMerge.help, "Merge queue · position 2 · Disable auto-merge")
+  }
+
   func testMergeStateInformationIsNotDuplicatedInAttentionSlot() {
-    XCTAssertNil(mergePullRequest(autoMerge: true).rowAttention)
-    XCTAssertNil(mergePullRequest(mergeState: .clean, authored: true).rowAttention)
-    XCTAssertNotNil(mergePullRequest(mergeState: .conflicting).rowAttention)
+    XCTAssertNil(mergePullRequest(autoMerge: true).rowAttention())
+    XCTAssertNil(mergePullRequest(mergeState: .clean, authored: true).rowAttention())
+    XCTAssertNil(mergePullRequest(authored: true, queuePosition: 1).rowAttention())
+    XCTAssertNotNil(mergePullRequest(mergeState: .conflicting).rowAttention())
   }
 
   func testNewCapabilitiesRoundTripAndOlderCacheRemainsReadable() throws {

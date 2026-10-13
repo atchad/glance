@@ -28,13 +28,6 @@ struct KeyboardSettingsPage: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      HStack {
-        SettingsSearchField(text: $search)
-          .frame(maxWidth: .infinity)
-      }
-      .padding(.horizontal, 20)
-      .padding(.vertical, 12)
-      Divider()
       SettingsForm {
         SettingsGroup {
           LabeledContent("Show or hide Glance") {
@@ -106,6 +99,7 @@ struct KeyboardSettingsPage: View {
           SettingsGroup { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.orange).textSelection(.enabled) }
         }
       }
+      .modifier(ShortcutSearchBar(text: $search))
       Divider()
       HStack {
         Menu("Advanced") {
@@ -120,6 +114,26 @@ struct KeyboardSettingsPage: View {
     .sheet(item: $editing) { target in BindingEditor(keys: keys, target: target) }
     .confirmationDialog("Reset all keybindings and the global hotkey?", isPresented: $confirmReset) {
       Button("Reset to defaults", role: .destructive) { keys.reset() }
+    }
+  }
+}
+
+private struct ShortcutSearchBar: ViewModifier {
+  @Binding var text: String
+
+  private var searchField: some View {
+    SettingsSearchField(text: $text)
+      .frame(maxWidth: .infinity)
+      .padding(.horizontal, 20)
+      .padding(.vertical, 12)
+  }
+
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if #available(macOS 26, *) {
+      content.safeAreaBar(edge: .top, spacing: 0) { searchField }
+    } else {
+      content.safeAreaInset(edge: .top, spacing: 0) { searchField }
     }
   }
 }

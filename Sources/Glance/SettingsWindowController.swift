@@ -13,7 +13,6 @@ final class SettingsWindowController: NSObject, ObservableObject, NSWindowDelega
   private let commands: ApplicationCommands
   private var window: NSWindow?
   let navigation = SettingsNavigation()
-  private weak var observedToolbar: NSToolbar?
 
   init(
     store: AppStore, panelController: FloatingPanelController,
@@ -24,6 +23,14 @@ final class SettingsWindowController: NSObject, ObservableObject, NSWindowDelega
     self.updateController = updateController
     self.keys = keys
     self.commands = commands
+    super.init()
+    // SwiftUI can create or replace the toolbar on the first category change.
+    // Observe before that happens, rather than attaching after the first layout.
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(toolbarWillAddItem),
+      name: NSToolbar.willAddItemNotification,
+      object: nil)
   }
 
   func show() {
@@ -48,7 +55,6 @@ final class SettingsWindowController: NSObject, ObservableObject, NSWindowDelega
     )
     window.title = "Glance Settings"
     window.titleVisibility = .visible
-    window.titlebarAppearsTransparent = true
     window.toolbarStyle = .unified
     window.minSize = NSSize(width: 720, height: 540)
     window.contentMinSize = NSSize(width: 720, height: 540)
@@ -72,7 +78,6 @@ final class SettingsWindowController: NSObject, ObservableObject, NSWindowDelega
         self.disableSidebarCollapse(in: contentView)
       }
       if let toolbar = window.toolbar {
-        self.observeToolbarIfNeeded(toolbar)
         toolbar.isVisible = true
       }
       if let toolbar = window.toolbar,
@@ -101,21 +106,18 @@ final class SettingsWindowController: NSObject, ObservableObject, NSWindowDelega
     for subview in view.subviews { disableSidebarCollapse(in: subview) }
   }
 
-  private func observeToolbarIfNeeded(_ toolbar: NSToolbar) {
-    guard observedToolbar !== toolbar else { return }
-    if let observedToolbar {
-      NotificationCenter.default.removeObserver(
-        self, name: NSToolbar.willAddItemNotification, object: observedToolbar)
-    }
-    observedToolbar = toolbar
-    NotificationCenter.default.addObserver(
-      self,
-      selector: #selector(toolbarWillAddItem),
-      name: NSToolbar.willAddItemNotification,
-      object: toolbar)
-  }
-
   @objc private func toolbarWillAddItem(_ notification: Notification) {
+    guard let item = notification.userInfo?.values.compactMap({ $0 as? NSToolbarItem }).first,
+      item.itemIdentifier == .toggleSidebar
+        || item.itemIdentifier == Self.swiftUISidebarToggleIdentifier
+    else { return }
+    // SwiftUI can reinsert this item during navigation. Hide it before AppKit
+    // displays it; the deferred removal below then keeps the toolbar clean.
+    if #available(macOS 15, *) {
+      item.isHidden = true
+    } else {
+      item.view?.isHidden = true
+    }
     guard let window else { return }
     removeSidebarToggle(from: window)
   }

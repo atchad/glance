@@ -13,10 +13,22 @@ struct SettingsForm<Content: View>: View {
         .padding(.top, 8)
         .padding(.bottom, 20)
     }
+    .modifier(SettingsScrollEdge())
     .font(.body)
     .controlSize(.small)
     .toggleStyle(.switch)
     .labeledContentStyle(SettingsRowStyle())
+  }
+}
+
+private struct SettingsScrollEdge: ViewModifier {
+  @ViewBuilder
+  func body(content: Content) -> some View {
+    if #available(macOS 26, *) {
+      content.scrollEdgeEffectStyle(.soft, for: .top)
+    } else {
+      content.clipped()
+    }
   }
 }
 

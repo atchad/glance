@@ -103,6 +103,7 @@ struct GlanceSettingsView: View {
         .navigationTitle(navigation.category.title)
         .toolbar(removing: .sidebarToggle)
     }
+    .scrollBounceBehavior(.basedOnSize)
     .onChange(of: columnVisibility) { _, visibility in
       if visibility != .all { columnVisibility = .all }
     }

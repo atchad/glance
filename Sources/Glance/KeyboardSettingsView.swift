@@ -28,6 +28,13 @@ struct KeyboardSettingsPage: View {
 
   var body: some View {
     VStack(spacing: 0) {
+      HStack {
+        SettingsSearchField(text: $search)
+          .frame(maxWidth: .infinity)
+      }
+      .padding(.horizontal, 20)
+      .padding(.vertical, 12)
+      Divider()
       SettingsForm {
         SettingsGroup {
           LabeledContent("Show or hide Glance") {
@@ -97,12 +104,6 @@ struct KeyboardSettingsPage: View {
         }
         if let error = keys.errorMessage ?? keys.registrationError {
           SettingsGroup { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.orange).textSelection(.enabled) }
-        }
-      }
-      .toolbar {
-        ToolbarItem(placement: .automatic) {
-          SettingsSearchField(text: $search)
-            .frame(width: 180)
         }
       }
       Divider()

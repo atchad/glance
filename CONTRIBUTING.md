@@ -51,6 +51,9 @@ script checks without the bundled window runners. CI caches debug and universal
 release builds using the Xcode/Swift/SDK identity and package/input hashes; every
 run still executes the tests and verifies the freshly packaged app. Pushes to
 `main` populate the trusted cache that new PRs and release tags can restore.
+Cached input timestamps are restored only for files with identical SHA-256 content,
+so a fresh checkout does not force recompilation of unchanged sources. Changed
+files retain their new timestamps and pass through the normal incremental build.
 
 Local application bundles receive an ad-hoc signature without hardened runtime when a Developer ID identity is not available. This allows macOS to load bundled frameworks that have no Team ID. Certificate-signed builds keep hardened runtime and timestamping. You do not need the maintainer's signing or notarization credentials to contribute.
 

@@ -17,6 +17,7 @@ esac
 swift test "${build_arguments[@]}"
 python3 scripts/test-release-notes.py
 python3 scripts/test-build-installers.py
+python3 scripts/test-build-cache.py
 if [[ "${1:-}" == --unit-only ]]; then exit 0; fi
 
 export GLANCE_TEST_BIN_PATH="$(swift build "${build_arguments[@]}" --show-bin-path)"

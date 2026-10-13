@@ -87,6 +87,9 @@ jobs:
           restore-keys: |
             swift-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-
 
+      - name: Restore unchanged build input timestamps
+        run: python3 scripts/build-cache.py restore
+
       - name: Run tests
         run: zsh scripts/test.sh
 
@@ -170,6 +173,9 @@ jobs:
           grep -q 'sparkle:edSignature=' dist/appcast.xml
           grep -q 'sparkle-signatures:' dist/appcast.xml
           (cd dist && shasum -a 256 Glance.dmg Glance.pkg appcast.xml > SHA256SUMS.txt)
+
+      - name: Record build input timestamps
+        run: python3 scripts/build-cache.py save
 
       - name: Publish immutable release assets
         env:

@@ -6,7 +6,9 @@ enum GitHubError: LocalizedError {
   case invalidResponse
   case api(String)
   case rateLimited(until: Date)
+  case http(status: Int, requestID: String?, message: String?, note: String? = nil)
 
+  /// The first line is a short summary; any further lines are diagnostics for tooltips.
   var errorDescription: String? {
     switch self {
     case .ghUnavailable:
@@ -19,7 +21,26 @@ enum GitHubError: LocalizedError {
       message
     case .rateLimited(let deadline):
       "GitHub rate limit reached. Refresh is paused until \(deadline.formatted(date: .omitted, time: .standard))."
+    case .http(let status, let requestID, let message, let note):
+      ([Self.isGatewayTimeout(status) ? "GitHub timed out before responding (HTTP \(status))."
+          : "GitHub request failed (HTTP \(status)).",
+        Self.isGatewayTimeout(status) ? "GitHub cancels API requests that run longer than 10 seconds. "
+          + "Pull requests with many checks, reviews, or review requests make each request slower." : nil,
+        note,
+        message.map { "GitHub said: \($0)" },
+        requestID.map { "GitHub request ID: \($0)" }] as [String?])
+        .compactMap { $0 }.joined(separator: "\n")
     }
+  }
+
+  static func isGatewayTimeout(_ status: Int) -> Bool { status == 502 || status == 504 }
+
+  static func http(_ response: HTTPURLResponse, data: Data) -> GitHubError {
+    let message = (try? JSONDecoder().decode(RateLimitEnvelope.self, from: data)).flatMap {
+      $0.message ?? $0.errors?.first?.message
+    }
+    return .http(status: response.statusCode,
+      requestID: response.value(forHTTPHeaderField: "X-GitHub-Request-Id"), message: message)
   }
 }
 
@@ -38,6 +59,9 @@ enum QueryValidationError: LocalizedError {
 }
 
 struct GitHubClient {
+  /// Each pull request in a section page costs roughly half a second of GitHub's 10-second budget.
+  static let sectionPageSize = 10
+
   private let session: GitHubSession
   private let requestFactory: GitHubRequestFactory
   private let urlSession: URLSession
@@ -314,13 +338,30 @@ struct GitHubClient {
     var viewer = ""
     var pullRequests: [RawPullRequest] = []
     var cursor: String?
+    var pageSize = Self.sectionPageSize
 
-    repeat {
-      let page = try await fetchPage(section: section, credential: credential, cursor: cursor)
+    while true {
+      let page: (viewer: String, pullRequests: [RawPullRequest], nextCursor: String?)
+      do {
+        page = try await fetchPage(
+          section: section, credential: credential, cursor: cursor, pageSize: pageSize)
+      } catch GitHubError.http(let status, let requestID, let message, _)
+        where GitHubError.isGatewayTimeout(status)
+      {
+        // GitHub's 10-second limit scales with page size, so retry the same page smaller.
+        guard pageSize == 1 else {
+          pageSize /= 2
+          try Task.checkCancellation()
+          continue
+        }
+        throw GitHubError.http(status: status, requestID: requestID, message: message,
+          note: "Glance retried with smaller pages, down to 1 pull request per request.")
+      }
       viewer = page.viewer
       pullRequests.append(contentsOf: page.pullRequests)
-      cursor = page.nextCursor
-    } while cursor != nil
+      guard let next = page.nextCursor else { break }
+      cursor = next
+    }
 
     for index in pullRequests.indices {
       guard var threads = pullRequests[index].reviewThreads else { continue }
@@ -359,8 +400,7 @@ struct GitHubClient {
       "query": query, "variables": ["id": id, "cursor": cursor]])
     let request = requestFactory.graphQLRequest(body: body, credential: credential)
     let (data, http) = try await responseData(for: request)
-    guard (200..<300).contains(http.statusCode)
-    else { throw GitHubError.invalidResponse }
+    guard (200..<300).contains(http.statusCode) else { throw GitHubError.http(http, data: data) }
     let decoded = try JSONDecoder.github.decode(ReviewThreadsResponse.self, from: data)
     if let message = decoded.errors?.first?.message { throw GitHubError.api(message) }
     guard let threads = decoded.data?.node?.reviewThreads else { throw GitHubError.invalidResponse }
@@ -370,12 +410,13 @@ struct GitHubClient {
   private func fetchPage(
     section: PRSection,
     credential: GitHubCredential,
-    cursor: String?
+    cursor: String?,
+    pageSize: Int
   ) async throws -> (viewer: String, pullRequests: [RawPullRequest], nextCursor: String?) {
     let query = """
-      query GlanceSection($query: String!, $cursor: String) {
+      query GlanceSection($query: String!, $first: Int!, $cursor: String) {
         viewer { login }
-        search(query: $query, type: ISSUE, first: 50, after: $cursor) {
+        search(query: $query, type: ISSUE, first: $first, after: $cursor) {
           pageInfo { hasNextPage endCursor }
           nodes {
             ... on PullRequest {
@@ -450,15 +491,13 @@ struct GitHubClient {
 
     let payload = GraphQLRequest(
       query: query,
-      variables: GraphQLVariables(query: section.query, cursor: cursor)
+      variables: GraphQLVariables(query: section.query, first: pageSize, cursor: cursor)
     )
     let request = requestFactory.graphQLRequest(
       body: try JSONEncoder().encode(payload), credential: credential)
 
     let (data, http) = try await responseData(for: request)
-    guard (200..<300).contains(http.statusCode) else {
-      throw GitHubError.api("GitHub request failed with status \(http.statusCode).")
-    }
+    guard (200..<300).contains(http.statusCode) else { throw GitHubError.http(http, data: data) }
 
     let decoded = try JSONDecoder.github.decode(GraphQLResponse.self, from: data)
     if let message = decoded.errors?.first?.message { throw GitHubError.api(message) }
@@ -503,6 +542,7 @@ private struct GraphQLRequest: Encodable {
 
 private struct GraphQLVariables: Encodable {
   let query: String
+  let first: Int
   let cursor: String?
 }
 

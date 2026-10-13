@@ -632,7 +632,7 @@ final class AppStore: ObservableObject {
     if let githubError = error as? GitHubError {
       switch githubError {
       case .ghUnavailable, .notAuthenticated: .authentication
-      case .invalidResponse, .api, .rateLimited: .unavailable
+      case .invalidResponse, .api, .rateLimited, .http: .unavailable
       }
     } else {
       .unavailable

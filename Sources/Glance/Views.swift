@@ -186,9 +186,7 @@ struct DashboardView: View {
     Section {
       if !section.isCollapsed {
         if let error = store.sectionErrors[section.id] {
-          Label(error, systemImage: "exclamationmark.triangle")
-            .font(.caption).foregroundStyle(.orange)
-            .textSelection(.enabled)
+          ErrorSummaryLabel(message: error, systemImage: "exclamationmark.triangle")
             .padding(.horizontal, 13).padding(.vertical, 6)
         }
         if items.isEmpty {
@@ -412,14 +410,9 @@ struct DashboardView: View {
   }
 
   private func errorBanner(_ message: String) -> some View {
-    Label(
-      message,
-      systemImage: "exclamationmark.triangle.fill"
-    )
-    .font(.caption).foregroundStyle(.orange)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(10).background(.orange.opacity(0.08))
-    .help(message)
+    ErrorSummaryLabel(message: message, systemImage: "exclamationmark.triangle.fill")
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(10).background(.orange.opacity(0.08))
   }
 
   private var footer: some View {
@@ -902,6 +895,31 @@ private struct AvatarView: View {
     }
     .frame(width: 14, height: 14)
     .clipShape(Circle())
+  }
+}
+
+/// Shows an error's first line, with the full message and diagnostics in the hover tooltip.
+struct ErrorSummaryLabel: View {
+  let message: String
+  let systemImage: String
+
+  static func summary(of message: String) -> (summary: String, hasDetails: Bool) {
+    let lines = message.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
+    return (String(lines.first ?? ""), lines.count > 1)
+  }
+
+  var body: some View {
+    let (summary, hasDetails) = Self.summary(of: message)
+    HStack(alignment: .firstTextBaseline, spacing: 4) {
+      Label(summary, systemImage: systemImage)
+      if hasDetails {
+        Image(systemName: "info.circle").imageScale(.small).accessibilityHidden(true)
+      }
+    }
+    .font(.caption).foregroundStyle(.orange)
+    .textSelection(.enabled)
+    .contentShape(Rectangle())
+    .nativeHelp(message)
   }
 }
 

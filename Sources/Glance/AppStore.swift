@@ -374,7 +374,7 @@ final class AppStore: ObservableObject {
           uniquingKeysWith: { first, _ in first })
         let fetchedSnapshots = Dictionary(uniqueKeysWithValues: result.snapshots.map { snapshot in
           (snapshot.id, snapshot.errorMessage == nil
-            ? snapshot.pullRequests : snapshots[snapshot.id, default: []].map { freshPullRequests[$0.id] ?? $0 })
+            ? snapshot.pullRequests : self.snapshots[snapshot.id, default: []].map { freshPullRequests[$0.id] ?? $0 })
         })
         if !sectionErrors.isEmpty {
           errorMessage = "Some sections couldn’t refresh. See details below."

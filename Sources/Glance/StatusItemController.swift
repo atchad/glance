@@ -16,13 +16,14 @@ final class StatusItemController: NSObject, ObservableObject {
   init(
     store: AppStore, keys: KeybindingStore, commands: ApplicationCommands,
     panel: FloatingPanelController,
-    statusItem: NSStatusItem? = nil, popover: NSPopover = NSPopover()
+    statusItem: NSStatusItem? = nil, popover: NSPopover? = nil
   ) {
     self.store = store
     self.keys = keys
     self.commands = commands
     self.panel = panel
     self.statusItem = statusItem ?? NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    let popover = popover ?? NSPopover()
     self.popover = popover
     super.init()
 

@@ -73,10 +73,25 @@ jobs:
           fi
           zsh -n scripts/*.sh
 
-      - name: Run tests
+      - name: Identify build toolchain
+        id: toolchain
         run: |
-          swift test
-          python3 scripts/test-release-notes.py
+          toolchain_key="$( { swift --version; xcodebuild -version; xcrun --show-sdk-path; } | shasum -a 256 | cut -d ' ' -f 1)"
+          echo "key=$toolchain_key" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Swift builds
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .build
+          key: swift-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-${{ hashFiles('Sources/**', 'Tests/**', 'scripts/**', 'support/**') }}
+          restore-keys: |
+            swift-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-
+
+      - name: Restore unchanged build input timestamps
+        run: python3 scripts/build-cache.py restore
+
+      - name: Run tests
+        run: zsh scripts/test.sh
 
       - name: Import Developer ID certificates
         shell: zsh {0}
@@ -136,10 +151,7 @@ jobs:
           print "GLANCE_NOTARY_ISSUER_ID=$NOTARY_ISSUER_ID" >> "$GITHUB_ENV"
 
       - name: Build, sign, notarize, and staple installers
-        run: |
-          ./scripts/build-app.sh release
-          ./scripts/build-dmg.sh --use-existing-app
-          ./scripts/build-pkg.sh --use-existing-app
+        run: zsh scripts/build-installers.sh
 
       - name: Generate signed update feed
         env:
@@ -161,6 +173,9 @@ jobs:
           grep -q 'sparkle:edSignature=' dist/appcast.xml
           grep -q 'sparkle-signatures:' dist/appcast.xml
           (cd dist && shasum -a 256 Glance.dmg Glance.pkg appcast.xml > SHA256SUMS.txt)
+
+      - name: Record build input timestamps
+        run: python3 scripts/build-cache.py save
 
       - name: Publish immutable release assets
         env:

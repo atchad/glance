@@ -165,6 +165,43 @@ class ReleaseNotesTests(unittest.TestCase):
         self.assertIn("Unformatted new commit", result.stderr)
         self.assertNotIn("Previous release", result.stderr)
 
+    def validate_commits(self, base):
+        return subprocess.run(
+            [sys.executable, str(GENERATOR.with_name("conventional_commits.py"))],
+            cwd=self.repo,
+            env=dict(os.environ, PR_TITLE="fix: repair scrolling", PR_BASE_SHA=base,
+                     PR_HEAD_SHA=self.git("rev-parse", "HEAD").strip()),
+            capture_output=True, text=True,
+        )
+
+    def merge_updated_main(self, feature_subject):
+        self.baseline()
+        self.git("checkout", "-b", "feature")
+        self.commit(feature_subject)
+        self.git("checkout", "main")
+        self.commit("Existing upstream commit")
+        base = self.git("rev-parse", "HEAD").strip()
+        self.git("checkout", "feature")
+        self.git("merge", "--no-ff", "main", "-m", "Merge branch 'main' into feature")
+        return base
+
+    def test_commit_validator_allows_github_update_branch_merge(self):
+        base = self.merge_updated_main("fix: repair scrolling")
+        result = self.validate_commits(base)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # A merge-looking subject on a one-parent commit must still fail.
+        self.commit("Merge branch 'main' into feature")
+        result = self.validate_commits(base)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Merge branch 'main' into feature", result.stderr)
+
+    def test_commit_validator_checks_feature_commits_beneath_merges(self):
+        base = self.merge_updated_main("Unformatted feature commit")
+        result = self.validate_commits(base)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Unformatted feature commit", result.stderr)
+        self.assertNotIn("Merge branch", result.stderr)
+
 
 class ConventionalCommitTests(unittest.TestCase):
     def test_valid_headers(self):

@@ -43,7 +43,7 @@ private struct ConcurrencyCredentials: GitHubCredentialProvider {
   func credential() async throws -> GitHubCredential { .init(accessToken: "fixture") }
 }
 
-private final class ConcurrencyProtocol: URLProtocol, @unchecked Sendable {
+private final class ConcurrencyProtocol: URLProtocol {
   private static let lock = NSLock()
   private static var active = 0
   private static var peak = 0

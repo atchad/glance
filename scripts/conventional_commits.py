@@ -41,8 +41,11 @@ if __name__ == "__main__":
         if not all(value and re.fullmatch(r"[0-9a-f]{40,64}", value) for value in (base, head)):
             print("Both PR_BASE_SHA and PR_HEAD_SHA must be full commit hashes.", file=sys.stderr)
             sys.exit(1)
+        # Integration merges (including GitHub's Update branch action) have
+        # generated subjects. Validate the ordinary commits on every parent
+        # branch, but do not require a Conventional Commit merge subject.
         commits = subprocess.check_output(
-            ["git", "log", "--format=%H", f"{base}..{head}"]
+            ["git", "log", "--no-merges", "--format=%H", f"{base}..{head}"]
         ).decode().splitlines()
         for commit in commits:
             subject = subprocess.check_output(

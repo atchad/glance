@@ -215,6 +215,10 @@ final class PullRequestBrowserTests: XCTestCase {
   private func settle() async { try? await Task.sleep(for: .milliseconds(100)) }
 
   func testLiveWebViewRetainsDraftScrollHistoryAndWindowAcrossCloseAndReopen() throws {
+    // Run the live window check once in the bundled CI runner, like PanelWindowChecks.
+    guard Bundle.main.bundleURL.pathExtension == "app" else {
+      throw XCTSkip("Run zsh scripts/test-pr-browser.sh for bundled WebKit checks.")
+    }
     XCTAssertGreaterThan(try PullRequestBrowserChecks.run(), 0)
   }
 }

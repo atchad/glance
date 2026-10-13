@@ -40,7 +40,7 @@ enum PullRequestBrowserChecks {
     }
     let html = """
       <!doctype html><html><body style="margin:0;height:5000px">
-      <textarea id="draft">initial</textarea><details id="thread"><summary>Thread</summary>Discussion</details>
+      <textarea id="draft" spellcheck="false">initial</textarea><details id="thread"><summary>Thread</summary>Discussion</details>
       <script>window.instanceID = Math.random().toString();</script></body></html>
       """
     page.webView.loadHTMLString(html, baseURL: URL(string: "https://github.com"))

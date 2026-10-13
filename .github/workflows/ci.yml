@@ -2,6 +2,10 @@ name: CI
 
 on:
   pull_request:
+  # Default-branch caches are available to new PRs and release tags. PR caches
+  # are scoped to their merge ref and cannot seed trusted release builds.
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -29,14 +33,25 @@ jobs:
           test -n "$(plutil -extract SUPublicEDKey raw support/Info.plist)"
           test "$(plutil -extract SURequireSignedFeed raw support/Info.plist)" = true
 
-      - name: Run tests
+      - name: Identify build toolchain
+        id: toolchain
         run: |
-          swift test
-          python3 scripts/test-release-notes.py
-          zsh scripts/test-keybindings.sh
-          zsh scripts/test-panel-window.sh
-          zsh scripts/test-repository-color-window.sh
-          zsh scripts/test-pr-browser.sh
+          toolchain_key="$( { swift --version; xcodebuild -version; xcrun --show-sdk-path; } | shasum -a 256 | cut -d ' ' -f 1)"
+          echo "key=$toolchain_key" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Swift builds
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .build
+          key: swift-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-${{ hashFiles('Sources/**', 'Tests/**', 'scripts/**', 'support/**') }}
+          restore-keys: |
+            swift-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.key }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-
+
+      - name: Restore unchanged build input timestamps
+        run: python3 scripts/build-cache.py restore
+
+      - name: Run tests
+        run: zsh scripts/test.sh
 
       - name: Build universal application
         run: ./scripts/build-app.sh release
@@ -51,3 +66,6 @@ jobs:
             | grep -q '@rpath/Sparkle.framework/Versions/B/Sparkle'
           otool -l dist/Glance.app/Contents/MacOS/Glance \
             | grep -q '@executable_path/../Frameworks'
+
+      - name: Record build input timestamps
+        run: python3 scripts/build-cache.py save

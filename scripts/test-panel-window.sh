@@ -5,8 +5,17 @@ repo_root="${0:A:h:h}"
 sdk="${GLANCE_SDK_PATH:-$(xcrun --show-sdk-path)}"
 cd "$repo_root"
 # The native backend exposes individual object files and supports this runner without XCTest.
-swift build --build-system native --sdk "$sdk"
-binary_path="$(swift build --build-system native --sdk "$sdk" --show-bin-path)"
+# The suite supplies its already-built native debug products. Standalone runs build first.
+if [[ -n "${GLANCE_TEST_BIN_PATH:-}" ]]; then
+    binary_path="$GLANCE_TEST_BIN_PATH"
+else
+    build_arguments=(--build-system native --sdk "$sdk")
+    if [[ -n "${GLANCE_BUILD_PATH:-}" ]]; then
+        build_arguments+=(--scratch-path "$GLANCE_BUILD_PATH")
+    fi
+    swift build "${build_arguments[@]}"
+    binary_path="$(swift build "${build_arguments[@]}" --show-bin-path)"
+fi
 test_directory="$(mktemp -d "${TMPDIR:-/tmp}/glance-panel-window.XXXXXX")"
 app_path="$test_directory/PanelWindowChecks.app"
 mkdir -p "$app_path/Contents/MacOS"

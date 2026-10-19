@@ -118,6 +118,7 @@ PRs, fetched check links, and notification links; it does not change your Mac's 
 browser. If the selected application moves, Glance tries to find it by bundle identifier.
 If it is removed or cannot open the link, Glance falls back to your default browser and
 shows a warning. New profiles open links in the default browser; existing profiles retain their selection.
+A row's context menu **Open on GitHub** always uses your default browser, whatever this setting is.
 
 Selecting Glance shows a **GitHub website** row below the dropdown. **Log in…** opens GitHub's
 normal login page in a dedicated window sharing the PR windows' WebKit cookie store. The

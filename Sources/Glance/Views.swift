@@ -228,7 +228,10 @@ struct DashboardView: View {
               mergeError: store.mergeActionErrors[pullRequest.id],
               merge: { Task { await store.performMergeAction(for: pullRequest) } },
               isApproving: store.approvingPullRequestIDs.contains(pullRequest.id),
-              approve: { Task { await store.approve(pullRequest) } }
+              approve: { Task { await store.approve(pullRequest) } },
+              openInDefaultBrowser: {
+                commands.openInDefaultBrowser(target: target(for: pullRequest, section: section))
+              }
             )
             .id(rowID(section, pullRequest))
             if pullRequest.id != items.last?.id {
@@ -628,6 +631,7 @@ struct PullRequestRow: View {
   var merge: () -> Void = {}
   var isApproving = false
   var approve: () -> Void = {}
+  var openInDefaultBrowser: () -> Void = {}
   @State private var detailFocusRequest = 0
   @State private var hovering = false
 
@@ -704,7 +708,7 @@ struct PullRequestRow: View {
         Button(isApproving ? "Approving…" : "Approve", action: approve).disabled(isApproving)
         Divider()
       }
-      Button("Open on GitHub") { perform(.openPR) }.help(keys.help(for: .openPR))
+      Button("Open on GitHub", action: openInDefaultBrowser)
       Button("Copy Title") { perform(.copyTitle) }.help(keys.help(for: .copyTitle))
       Button("Copy URL") { perform(.copyURL) }.help(keys.help(for: .copyURL))
       Button("Copy Branch") { perform(.copyBranch) }.help(keys.help(for: .copyBranch))

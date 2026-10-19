@@ -194,6 +194,35 @@ final class LinkOpeningTests: XCTestCase {
     XCTAssertEqual(pages[0].shows, 2)
   }
 
+  func testOpenInDefaultBrowserIgnoresConfiguredDestination() async {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let pr = BrowserFixtures.pullRequest(1)
+    var defaultLinks: [URL] = []
+    var applications: [URL] = []
+    let opener = ExternalLinkOpener(resolve: { $0.url },
+      openDefault: { defaultLinks.append($0); return true },
+      openApplication: { _, application in applications.append(application) })
+    let store = AppStore(storageDirectory: directory, externalLinkOpener: opener) { _ in ("fixture", []) }
+    var pages = 0
+    let browser = PullRequestBrowser(dataStore: .nonPersistent()) { _ in pages += 1; return RoutingBrowserPage() }
+    store.enablePullRequestBrowser(browser)
+    defer { browser.shutDown() }
+    let commands = ApplicationCommands(store: store, updates: UpdateController(startingUpdater: false))
+    var opened = 0
+    let target = CommandTarget(pullRequest: pr, didOpen: { opened += 1 })
+    for preference in [LinkOpeningPreference.application(application), .glance, .defaultBrowser] {
+      store.preferences.linkOpening = preference
+      XCTAssertTrue(commands.openInDefaultBrowser(target: target))
+    }
+    await waitUntil { defaultLinks.count == 3 }
+    XCTAssertEqual(defaultLinks, [pr.url, pr.url, pr.url])
+    XCTAssertEqual(applications, [])
+    XCTAssertEqual(pages, 0)
+    XCTAssertEqual(opened, 3)
+    XCTAssertFalse(commands.openInDefaultBrowser(target: CommandTarget()))
+  }
+
   func testExternalModeNeverPreloadsAndDiscardOnlyUnopenedPagesOnSwitch() {
     let opened = RoutingBrowserPage()
     let unopened = RoutingBrowserPage()

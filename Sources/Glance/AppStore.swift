@@ -562,11 +562,11 @@ final class AppStore: ObservableObject {
     openLink(url)
   }
 
-  func openLink(_ url: URL, pullRequest: PullRequest? = nil) {
+  func openLink(_ url: URL, pullRequest: PullRequest? = nil, preference: LinkOpeningPreference? = nil) {
     linkOpenGeneration += 1
     let generation = linkOpenGeneration
     linkOpeningErrorMessage = nil
-    let preference = preferences.linkOpening
+    let preference = preference ?? preferences.linkOpening
     if preference == .glance, url.scheme?.lowercased() == "https" {
       enablePullRequestBrowser()
       if let pr = pullRequest ?? browserPullRequests.first(where: { $0.url == url }) {

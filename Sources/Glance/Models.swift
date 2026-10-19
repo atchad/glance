@@ -58,9 +58,9 @@ struct PullRequest: Codable, Identifiable, Hashable {
   let deletions: Int
   let labels: [String]
   let requestedReviewers: [String]
-  let viewerReviewState: String?
-  let viewerReviewedHeadOID: String?
-  let viewerReviewSubmittedAt: Date?
+  var viewerReviewState: String?
+  var viewerReviewedHeadOID: String?
+  var viewerReviewSubmittedAt: Date?
   let hasCurrentApprovalFromOtherReviewer: Bool?
   let stackPosition: Int?
   let stackSize: Int?
@@ -103,6 +103,12 @@ struct PullRequest: Codable, Identifiable, Hashable {
     case "CLOSED": return .closed
     default: return nil
     }
+  }
+
+  /// GitHub rejects approvals of drafts and your own pull requests; an approval pins the shown head.
+  var canApprove: Bool {
+    viewerDidAuthor == false && lifecycleState == .open && !isDraft && headRefOID != nil
+      && !(viewerReviewState == "APPROVED" && viewerReviewedHeadOID == headRefOID)
   }
 
   func isDismissed(by revisions: [String: String]) -> Bool {

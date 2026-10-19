@@ -27,6 +27,9 @@ struct DashboardView: View {
       ForEach(store.mergeActionErrors.keys.sorted(), id: \.self) { id in
         if let message = store.mergeActionErrors[id] { errorBanner(message) }
       }
+      ForEach(store.approvalErrors.keys.sorted(), id: \.self) { id in
+        if let message = store.approvalErrors[id] { errorBanner(message) }
+      }
       if let message = keys.errorMessage ?? keys.registrationError { errorBanner(message) }
       if store.errorMessage != nil, store.snapshots.isEmpty {
         if store.connectionIssue == .authentication {
@@ -223,7 +226,9 @@ struct DashboardView: View {
               openLink: { store.openLink($0) },
               isMerging: store.mergingPullRequestIDs.contains(pullRequest.id),
               mergeError: store.mergeActionErrors[pullRequest.id],
-              merge: { Task { await store.performMergeAction(for: pullRequest) } }
+              merge: { Task { await store.performMergeAction(for: pullRequest) } },
+              isApproving: store.approvingPullRequestIDs.contains(pullRequest.id),
+              approve: { Task { await store.approve(pullRequest) } }
             )
             .id(rowID(section, pullRequest))
             if pullRequest.id != items.last?.id {
@@ -621,6 +626,8 @@ struct PullRequestRow: View {
   var isMerging = false
   var mergeError: String? = nil
   var merge: () -> Void = {}
+  var isApproving = false
+  var approve: () -> Void = {}
   @State private var detailFocusRequest = 0
   @State private var hovering = false
 
@@ -693,6 +700,10 @@ struct PullRequestRow: View {
     .accessibilityHint(Text(verbatim: "Open #\(pullRequest.number) on GitHub"))
     // A row-wide .help overrides every nested icon's caption in SwiftUI.
     .contextMenu {
+      if pullRequest.canApprove {
+        Button(isApproving ? "Approving…" : "Approve", action: approve).disabled(isApproving)
+        Divider()
+      }
       Button("Open on GitHub") { perform(.openPR) }.help(keys.help(for: .openPR))
       Button("Copy Title") { perform(.copyTitle) }.help(keys.help(for: .copyTitle))
       Button("Copy URL") { perform(.copyURL) }.help(keys.help(for: .copyURL))

@@ -41,6 +41,8 @@ final class AppStore: ObservableObject {
   @Published private(set) var linkOpeningErrorMessage: String?
   @Published private(set) var mergingPullRequestIDs: Set<String> = []
   @Published private(set) var mergeActionErrors: [String: String] = [:]
+  @Published private(set) var approvingPullRequestIDs: Set<String> = []
+  @Published private(set) var approvalErrors: [String: String] = [:]
   @Published var preferences: Preferences {
     didSet {
       guard !isLoadingStorage,
@@ -81,6 +83,7 @@ final class AppStore: ObservableObject {
   private var pullRequestBrowser: PullRequestBrowser?
   private let externalLinkOpener: ExternalLinkOpener
   private let mergeAction: (PullRequestMergeAction, PullRequest) async throws -> PullRequestMergeResult
+  private let approveAction: (PullRequest) async throws -> PullRequestApprovalResult
   private var linkOpenGeneration = 0
   private let fetchSnapshots: ([PRSection]) async throws -> (
     viewer: String, snapshots: [SectionSnapshot]
@@ -100,6 +103,10 @@ final class AppStore: ObservableObject {
     fetchSnapshots: @escaping ([PRSection]) async throws -> (
       viewer: String, snapshots: [SectionSnapshot]
     ) = { try await GitHubClient().fetchAll(sections: $0) },
+    // Before the two-argument merge closure, so an unlabeled trailing closure still means fetchSnapshots.
+    approvePullRequest: @escaping (PullRequest) async throws -> PullRequestApprovalResult = {
+      try await GitHubClient().approve($0)
+    },
     performMergeAction: @escaping (PullRequestMergeAction, PullRequest) async throws -> PullRequestMergeResult = {
       try await GitHubClient().performMergeAction($0, on: $1)
     }
@@ -109,6 +116,7 @@ final class AppStore: ObservableObject {
     cacheURL = directory.appending(path: "cache.json")
     self.fetchSnapshots = fetchSnapshots
     mergeAction = performMergeAction
+    approveAction = approvePullRequest
     self.externalLinkOpener = externalLinkOpener ?? ExternalLinkOpener()
     self.dismissalUndoDuration =
       dismissalUndoDuration.isFinite && dismissalUndoDuration > 0 ? dismissalUndoDuration : 5
@@ -303,6 +311,47 @@ final class AppStore: ObservableObject {
     }
   }
 
+  func approve(_ pullRequest: PullRequest) async {
+    guard !approvingPullRequestIDs.contains(pullRequest.id),
+      let current = snapshots.values.lazy.flatMap({ $0 }).first(where: { $0.id == pullRequest.id }),
+      current.canApprove else { return }
+    // Never approve commits the menu was not showing.
+    guard current.headRefOID == pullRequest.headRefOID else {
+      approvalErrors[pullRequest.id] = "Pull request changed. Refresh before trying again."
+      return
+    }
+    if let deadline = refreshBlockedUntil, deadline > Date() {
+      approvalErrors[pullRequest.id] = GitHubError.rateLimited(until: deadline).localizedDescription
+      return
+    }
+    approvingPullRequestIDs.insert(current.id)
+    approvalErrors.removeValue(forKey: current.id)
+    defer { approvingPullRequestIDs.remove(current.id) }
+    do {
+      let result = try await approveAction(current)
+      guard result.id == current.id else { throw GitHubError.invalidResponse }
+      // Discard search responses that began before this write succeeded.
+      refreshGeneration &+= 1
+      if isRefreshing { refreshQueued = true }
+      snapshots = snapshots.mapValues { requests in
+        requests.map { pr in
+          guard pr.id == result.id else { return pr }
+          var updated = pr
+          updated.viewerReviewState = "APPROVED"
+          updated.viewerReviewedHeadOID = result.headOID
+          updated.viewerReviewSubmittedAt = result.submittedAt ?? Date()
+          return updated
+        }
+      }
+      saveCache()
+      // GitHub recomputes the review decision and removes the review request.
+      refresh()
+    } catch {
+      if case GitHubError.rateLimited(let deadline) = error { refreshBlockedUntil = deadline }
+      approvalErrors[current.id] = error.localizedDescription
+    }
+  }
+
   func applyRepositorySelection(_ selected: Set<String>) {
     preferences.excludedRepositories = Self.excludedRepositories(
       all: accessibleRepositories,
@@ -398,6 +447,7 @@ final class AppStore: ObservableObject {
         if hasSuccessfulSection { hasNotificationBaseline = true }
         let activeIDs = Set(nextSnapshots.values.flatMap { $0.map(\.id) })
         mergeActionErrors = mergeActionErrors.filter { activeIDs.contains($0.key) }
+        approvalErrors = approvalErrors.filter { activeIDs.contains($0.key) }
         let retainedDismissals = preferences.dismissedRevisions.filter {
           activeIDs.contains($0.key)
         }

@@ -169,6 +169,57 @@ struct GitHubClient {
       autoMergeEnabled: result.autoMergeRequest != nil, isDraft: result.isDraft)
   }
 
+  func approve(_ pullRequest: PullRequest) async throws -> PullRequestApprovalResult {
+    guard pullRequest.canApprove, let head = pullRequest.headRefOID else {
+      throw GitHubError.api("This pull request can’t be approved.")
+    }
+    let credential = try await session.credential()
+    let headQuery = """
+      query GlanceApprovalHead($id: ID!) {
+        node(id: $id) { ... on PullRequest { id headRefOid } }
+      }
+      """
+    let headBody = try JSONSerialization.data(withJSONObject: [
+      "query": headQuery, "variables": ["id": pullRequest.id],
+    ])
+    let (headData, headHTTP) = try await responseData(
+      for: requestFactory.graphQLRequest(body: headBody, credential: credential))
+    guard (200..<300).contains(headHTTP.statusCode) else {
+      throw GitHubError.http(headHTTP, data: headData)
+    }
+    let remote = try JSONDecoder().decode(ApprovalHeadResponse.self, from: headData)
+    if let message = remote.errors?.first?.message { throw GitHubError.api(message) }
+    guard let node = remote.data?.node, node.id == pullRequest.id else {
+      throw GitHubError.invalidResponse
+    }
+    guard node.headRefOid == head else {
+      throw GitHubError.api("Pull request changed. Refresh before trying again.")
+    }
+    let query = """
+      mutation GlanceApprove($input: AddPullRequestReviewInput!) {
+        result: addPullRequestReview(input: $input) {
+          pullRequestReview { state submittedAt commit { oid } pullRequest { id } }
+        }
+      }
+      """
+    // Record the review against the displayed commit. Unlike expectedHeadOid on merge,
+    // commitOID is not atomic stale-head protection: a push can race the head check.
+    let input = ["pullRequestId": pullRequest.id, "commitOID": head, "event": "APPROVE"]
+    let body = try JSONSerialization.data(withJSONObject: ["query": query, "variables": ["input": input]])
+    let request = requestFactory.graphQLRequest(body: body, credential: credential)
+    let (data, http) = try await responseData(for: request)
+    guard (200..<300).contains(http.statusCode) else {
+      throw GitHubError.api((try? JSONDecoder().decode(RESTError.self, from: data).message)
+        ?? "GitHub could not approve this pull request (status \(http.statusCode)).")
+    }
+    let decoded = try JSONDecoder.github.decode(ApprovalResponse.self, from: data)
+    if let message = decoded.errors?.first?.message { throw GitHubError.api(message) }
+    guard let review = decoded.data?.result?.pullRequestReview, review.state == "APPROVED",
+      review.pullRequest.id == pullRequest.id, review.commit?.oid == head
+    else { throw GitHubError.invalidResponse }
+    return PullRequestApprovalResult(id: pullRequest.id, headOID: head, submittedAt: review.submittedAt)
+  }
+
   func fetchAccessibleRepositories() async throws -> [String] {
     let credential = try await session.credential()
     var page = 1
@@ -828,6 +879,37 @@ private struct ReviewThreadsResponse: Decodable {
   struct Failure: Decodable { let message: String }
   let data: GraphData?
   let errors: [Failure]?
+}
+
+private struct ApprovalHeadResponse: Decodable {
+  struct GraphData: Decodable {
+    struct Node: Decodable {
+      let id: String
+      let headRefOid: String
+    }
+    let node: Node?
+  }
+  let data: GraphData?
+  let errors: [GraphError]?
+}
+
+private struct ApprovalResponse: Decodable {
+  struct GraphData: Decodable {
+    struct Result: Decodable {
+      struct Review: Decodable {
+        struct Commit: Decodable { let oid: String }
+        struct PullRequestID: Decodable { let id: String }
+        let state: String
+        let submittedAt: Date?
+        let commit: Commit?
+        let pullRequest: PullRequestID
+      }
+      let pullRequestReview: Review?
+    }
+    let result: Result?
+  }
+  let data: GraphData?
+  let errors: [GraphError]?
 }
 
 private struct MergeActionResponse: Decodable {

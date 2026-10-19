@@ -27,6 +27,12 @@ struct PullRequestMergeResult {
   var isDraft: Bool? = nil
 }
 
+struct PullRequestApprovalResult {
+  let id: String
+  let headOID: String
+  let submittedAt: Date?
+}
+
 /// GitHub's mergeability status is authoritative; aggregate checks cannot identify required checks.
 struct PullRequestMergeControl {
   enum State { case open, autoMergeEnabled, queued, ready, merged, closed, draft, unknown }

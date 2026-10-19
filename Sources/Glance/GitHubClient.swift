@@ -169,6 +169,35 @@ struct GitHubClient {
       autoMergeEnabled: result.autoMergeRequest != nil, isDraft: result.isDraft)
   }
 
+  func approve(_ pullRequest: PullRequest) async throws -> PullRequestApprovalResult {
+    guard pullRequest.canApprove, let head = pullRequest.headRefOID else {
+      throw GitHubError.api("This pull request can’t be approved.")
+    }
+    let query = """
+      mutation GlanceApprove($input: AddPullRequestReviewInput!) {
+        result: addPullRequestReview(input: $input) {
+          pullRequestReview { state submittedAt commit { oid } pullRequest { id } }
+        }
+      }
+      """
+    // Pinning the commit refuses to approve anything pushed after the displayed revision.
+    let input = ["pullRequestId": pullRequest.id, "commitOID": head, "event": "APPROVE"]
+    let credential = try await session.credential()
+    let body = try JSONSerialization.data(withJSONObject: ["query": query, "variables": ["input": input]])
+    let request = requestFactory.graphQLRequest(body: body, credential: credential)
+    let (data, http) = try await responseData(for: request)
+    guard (200..<300).contains(http.statusCode) else {
+      throw GitHubError.api((try? JSONDecoder().decode(RESTError.self, from: data).message)
+        ?? "GitHub could not approve this pull request (status \(http.statusCode)).")
+    }
+    let decoded = try JSONDecoder.github.decode(ApprovalResponse.self, from: data)
+    if let message = decoded.errors?.first?.message { throw GitHubError.api(message) }
+    guard let review = decoded.data?.result?.pullRequestReview, review.state == "APPROVED",
+      review.pullRequest.id == pullRequest.id, review.commit?.oid == head
+    else { throw GitHubError.invalidResponse }
+    return PullRequestApprovalResult(id: pullRequest.id, headOID: head, submittedAt: review.submittedAt)
+  }
+
   func fetchAccessibleRepositories() async throws -> [String] {
     let credential = try await session.credential()
     var page = 1
@@ -828,6 +857,25 @@ private struct ReviewThreadsResponse: Decodable {
   struct Failure: Decodable { let message: String }
   let data: GraphData?
   let errors: [Failure]?
+}
+
+private struct ApprovalResponse: Decodable {
+  struct GraphData: Decodable {
+    struct Result: Decodable {
+      struct Review: Decodable {
+        struct Commit: Decodable { let oid: String }
+        struct PullRequestID: Decodable { let id: String }
+        let state: String
+        let submittedAt: Date?
+        let commit: Commit?
+        let pullRequest: PullRequestID
+      }
+      let pullRequestReview: Review?
+    }
+    let result: Result?
+  }
+  let data: GraphData?
+  let errors: [GraphError]?
 }
 
 private struct MergeActionResponse: Decodable {

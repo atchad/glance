@@ -173,7 +173,7 @@ final class PullRequestMergeTests: XCTestCase {
 
 func mergePullRequest(
   mergeState: PullRequest.MergeState? = .blocked, autoMerge: Bool = false,
-  lifecycle: PullRequest.LifecycleState? = .open, draft: Bool = false, authored: Bool = false,
+  lifecycle: PullRequest.LifecycleState? = .open, draft: Bool = false, authored: Bool? = false,
   headOID: String? = "abc123", queuePosition: Int? = nil
 ) -> PullRequest {
   var pr = PullRequest(

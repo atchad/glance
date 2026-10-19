@@ -22,7 +22,7 @@
 - Opens at login and refreshes automatically on your preferred schedule.
 - Checks for new Glance releases and can install them automatically.
 
-Command-click a pull request to dismiss its current revision. If a new commit is pushed, the pull request returns automatically. Use a row's context menu to pin it or snooze it.
+Command-click a pull request to dismiss its current revision. If a new commit is pushed, the pull request returns automatically. Use a row's context menu to pin it or snooze it, or to approve someone else's open, non-draft pull request. Approval applies only to the commit Glance shows; if newer commits were pushed, refresh first.
 
 Press Control–Shift–Space to show and focus Glance from any app. Press it again while the panel has focus to hide it. With the dashboard focused, use the arrow keys or J/K to move between pull requests, Return to open the selected pull request, D to dismiss it, P to pin it, R to refresh, and / to search. Short sequences add more actions: C then U copies a URL; S then H snoozes for one hour. Prefixes show available next keys; Escape cancels.
 

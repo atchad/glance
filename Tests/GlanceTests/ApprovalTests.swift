@@ -39,6 +39,10 @@ final class GitHubApprovalTests: XCTestCase {
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer fixture")
         let payload = try self.payload(request)
         let query = payload["query"] as! String
+        if query.contains("GlanceApprovalHead") {
+          XCTAssertEqual((payload["variables"] as! [String: String])["id"], pr.id)
+          return (200, self.headResponse(id: pr.id, head: "abc123"))
+        }
         XCTAssertTrue(query.contains("addPullRequestReview"))
         XCTAssertTrue(query.contains("AddPullRequestReviewInput"))
         let input = (payload["variables"] as! [String: Any])["input"] as! [String: String]
@@ -64,7 +68,12 @@ final class GitHubApprovalTests: XCTestCase {
     ]
     for (status, data, message) in responses {
       try await withClient { client in
-        ApprovalURLProtocol.handler = { _ in (status, data) }
+        ApprovalURLProtocol.handler = { request in
+          if (try self.payload(request)["query"] as! String).contains("GlanceApprovalHead") {
+            return (200, self.headResponse(id: "PR_merge", head: "abc123"))
+          }
+          return (status, data)
+        }
         do {
           _ = try await client.approve(mergePullRequest())
           XCTFail("Unconfirmed approval must fail")
@@ -86,6 +95,36 @@ final class GitHubApprovalTests: XCTestCase {
         } catch {}
       }
     }
+  }
+
+  func testRemoteHeadChangeOrUnconfirmedHeadNeverSubmitsApproval() async throws {
+    let responses: [(Int, Data, String?)] = [
+      (200, headResponse(id: "PR_merge", head: "newer"),
+       "Pull request changed. Refresh before trying again."),
+      (200, headResponse(id: "other-pr", head: "abc123"), nil),
+      (200, Data(#"{"data":{"node":null}}"#.utf8), nil),
+      (200, Data(#"{"errors":[{"message":"Access denied"}]}"#.utf8), "Access denied"),
+      (403, Data(#"{"message":"Resource not accessible"}"#.utf8), nil),
+    ]
+    for (status, data, message) in responses {
+      try await withClient { client in
+        ApprovalURLProtocol.handler = { request in
+          XCTAssertFalse((try self.payload(request)["query"] as! String).contains("addPullRequestReview"),
+            "A failed head check must not submit a review")
+          return (status, data)
+        }
+        do {
+          _ = try await client.approve(mergePullRequest())
+          XCTFail("An unconfirmed remote head must not be approved")
+        } catch {
+          if let message { XCTAssertEqual(error.localizedDescription, message) }
+        }
+      }
+    }
+  }
+
+  private func headResponse(id: String, head: String) -> Data {
+    try! JSONSerialization.data(withJSONObject: ["data": ["node": ["id": id, "headRefOid": head]]])
   }
 
   private func response(id: String, state: String, commit: String) -> Data {
@@ -126,18 +165,23 @@ final class ApprovalStoreTests: XCTestCase {
     let gate = ApprovalGate()
     let pr = mergePullRequest()
     let refreshes = RefreshCounter()
+    var served = pr
     let store = AppStore(storageDirectory: directory, fetchSnapshots: { sections in
       await refreshes.increment()
-      return ("viewer", sections.map { SectionSnapshot(id: $0.id, pullRequests: [pr]) })
+      return ("viewer", sections.map { SectionSnapshot(id: $0.id, pullRequests: [served]) })
     }, approvePullRequest: gate.approve)
     store.refresh()
     await finishRefresh(store)
+    store.preferences.pinnedPullRequests.insert(pr.id)
     let first = Task { await store.approve(pr) }
     await gate.waitForRequest()
     XCTAssertTrue(store.approvingPullRequestIDs.contains(pr.id))
     await store.approve(pr)
     XCTAssertEqual(gate.calls, 1)
     let submittedAt = Date(timeIntervalSince1970: 1_800_000_000)
+    served.viewerReviewState = "APPROVED"
+    served.viewerReviewedHeadOID = "abc123"
+    served.viewerReviewSubmittedAt = submittedAt
     gate.pending?.resume(returning: .init(id: pr.id, headOID: "abc123", submittedAt: submittedAt))
     await first.value
     XCTAssertTrue(store.approvingPullRequestIDs.isEmpty)
@@ -150,8 +194,15 @@ final class ApprovalStoreTests: XCTestCase {
     await store.approve(pr) // A stale menu must not approve twice.
     XCTAssertEqual(gate.calls, 1)
     let restored = AppStore(storageDirectory: directory)
-    XCTAssertTrue(restored.snapshots.values.flatMap { $0 }.allSatisfy { $0.viewerReviewState == "APPROVED" })
+    let cached = restored.snapshots.values.flatMap { $0 }
+    XCTAssertFalse(cached.isEmpty)
+    XCTAssertTrue(cached.allSatisfy {
+      $0.id == pr.id && $0.viewerReviewState == "APPROVED"
+        && $0.viewerReviewedHeadOID == "abc123" && $0.viewerReviewSubmittedAt == submittedAt
+    })
     await finishRefresh(store)
+    await store.approve(pr)
+    XCTAssertEqual(gate.calls, 1, "A confirmed follow-up read must keep the approval ineligible")
     let refreshCount = await refreshes.count
     XCTAssertEqual(refreshCount, 2, "Approval refreshes so GitHub's review decision and requests catch up")
   }

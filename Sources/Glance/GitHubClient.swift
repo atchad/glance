@@ -173,6 +173,28 @@ struct GitHubClient {
     guard pullRequest.canApprove, let head = pullRequest.headRefOID else {
       throw GitHubError.api("This pull request can’t be approved.")
     }
+    let credential = try await session.credential()
+    let headQuery = """
+      query GlanceApprovalHead($id: ID!) {
+        node(id: $id) { ... on PullRequest { id headRefOid } }
+      }
+      """
+    let headBody = try JSONSerialization.data(withJSONObject: [
+      "query": headQuery, "variables": ["id": pullRequest.id],
+    ])
+    let (headData, headHTTP) = try await responseData(
+      for: requestFactory.graphQLRequest(body: headBody, credential: credential))
+    guard (200..<300).contains(headHTTP.statusCode) else {
+      throw GitHubError.http(headHTTP, data: headData)
+    }
+    let remote = try JSONDecoder().decode(ApprovalHeadResponse.self, from: headData)
+    if let message = remote.errors?.first?.message { throw GitHubError.api(message) }
+    guard let node = remote.data?.node, node.id == pullRequest.id else {
+      throw GitHubError.invalidResponse
+    }
+    guard node.headRefOid == head else {
+      throw GitHubError.api("Pull request changed. Refresh before trying again.")
+    }
     let query = """
       mutation GlanceApprove($input: AddPullRequestReviewInput!) {
         result: addPullRequestReview(input: $input) {
@@ -180,9 +202,9 @@ struct GitHubClient {
         }
       }
       """
-    // Pinning the commit refuses to approve anything pushed after the displayed revision.
+    // Record the review against the displayed commit. Unlike expectedHeadOid on merge,
+    // commitOID is not atomic stale-head protection: a push can race the head check.
     let input = ["pullRequestId": pullRequest.id, "commitOID": head, "event": "APPROVE"]
-    let credential = try await session.credential()
     let body = try JSONSerialization.data(withJSONObject: ["query": query, "variables": ["input": input]])
     let request = requestFactory.graphQLRequest(body: body, credential: credential)
     let (data, http) = try await responseData(for: request)
@@ -857,6 +879,18 @@ private struct ReviewThreadsResponse: Decodable {
   struct Failure: Decodable { let message: String }
   let data: GraphData?
   let errors: [Failure]?
+}
+
+private struct ApprovalHeadResponse: Decodable {
+  struct GraphData: Decodable {
+    struct Node: Decodable {
+      let id: String
+      let headRefOid: String
+    }
+    let node: Node?
+  }
+  let data: GraphData?
+  let errors: [GraphError]?
 }
 
 private struct ApprovalResponse: Decodable {

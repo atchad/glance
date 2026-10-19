@@ -106,6 +106,15 @@ final class ApplicationCommands: ObservableObject {
     return true
   }
 
+  /// An explicit escape hatch from the configured link destination, e.g. the row menu's "Open on GitHub".
+  @discardableResult
+  func openInDefaultBrowser(target: CommandTarget) -> Bool {
+    guard let pr = target.pullRequest else { return false }
+    store.openLink(pr.url, preference: .defaultBrowser)
+    target.didOpen?()
+    return true
+  }
+
   nonisolated static func copy(_ text: String, to pasteboard: NSPasteboard = .general) {
     pasteboard.clearContents()
     pasteboard.setString(text, forType: .string)

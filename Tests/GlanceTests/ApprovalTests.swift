@@ -3,10 +3,10 @@ import XCTest
 @testable import Glance
 
 final class ApprovalEligibilityTests: XCTestCase {
-  func testOnlyOpenReadyPullRequestsByOthersCanBeApproved() {
+  func testOnlyOpenPullRequestsByOthersCanBeApproved() {
     XCTAssertTrue(mergePullRequest().canApprove)
     XCTAssertFalse(mergePullRequest(authored: true).canApprove, "GitHub forbids approving your own PR")
-    XCTAssertFalse(mergePullRequest(draft: true).canApprove, "GitHub forbids approving drafts")
+    XCTAssertTrue(mergePullRequest(draft: true).canApprove, "GitHub accepts approvals of drafts")
     XCTAssertFalse(mergePullRequest(lifecycle: .closed).canApprove)
     XCTAssertFalse(mergePullRequest(lifecycle: .merged).canApprove)
     XCTAssertFalse(mergePullRequest(lifecycle: nil).canApprove)
@@ -32,7 +32,10 @@ final class ApprovalEligibilityTests: XCTestCase {
 
 final class GitHubApprovalTests: XCTestCase {
   func testApprovalSubmitsAnApproveReviewPinnedToTheDisplayedHead() async throws {
-    let pr = mergePullRequest()
+    for draft in [false, true] { try await assertApprovalSubmitted(mergePullRequest(draft: draft)) }
+  }
+
+  private func assertApprovalSubmitted(_ pr: PullRequest) async throws {
     let result = try await withClient { client in
       ApprovalURLProtocol.handler = { request in
         XCTAssertEqual(request.httpMethod, "POST")
@@ -87,8 +90,8 @@ final class GitHubApprovalTests: XCTestCase {
   func testIneligiblePullRequestsNeverIssueARequest() async throws {
     try await withClient { client in
       ApprovalURLProtocol.handler = { _ in XCTFail("Unexpected mutation"); return (500, Data()) }
-      for pr in [mergePullRequest(authored: true), mergePullRequest(draft: true),
-                 mergePullRequest(lifecycle: .merged), mergePullRequest(headOID: nil)] {
+      for pr in [mergePullRequest(authored: true), mergePullRequest(lifecycle: .merged),
+                 mergePullRequest(headOID: nil)] {
         do {
           _ = try await client.approve(pr)
           XCTFail("Ineligible PR must not be approved")

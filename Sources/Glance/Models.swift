@@ -105,9 +105,9 @@ struct PullRequest: Codable, Identifiable, Hashable {
     }
   }
 
-  /// GitHub rejects approvals of drafts and your own pull requests; an approval pins the shown head.
+  /// GitHub rejects approvals of your own pull requests but accepts drafts; an approval pins the shown head.
   var canApprove: Bool {
-    viewerDidAuthor == false && lifecycleState == .open && !isDraft && headRefOID != nil
+    viewerDidAuthor == false && lifecycleState == .open && headRefOID != nil
       && !(viewerReviewState == "APPROVED" && viewerReviewedHeadOID == headRefOID)
   }
 

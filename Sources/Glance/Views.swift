@@ -705,7 +705,8 @@ struct PullRequestRow: View {
     // A row-wide .help overrides every nested icon's caption in SwiftUI.
     .contextMenu {
       if pullRequest.canApprove {
-        Button(isApproving ? "Approving…" : "Approve", action: approve).disabled(isApproving)
+        Button(isApproving ? "Approving…" : pullRequest.isDraft ? "Approve Draft" : "Approve", action: approve)
+          .disabled(isApproving)
         Divider()
       }
       Button("Open on GitHub", action: openInDefaultBrowser)

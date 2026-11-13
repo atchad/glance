@@ -11,7 +11,14 @@ final class StatusItemController: NSObject, ObservableObject {
   private let statusItem: NSStatusItem
   private let popover: NSPopover
   var isPopoverShown: Bool { popover.isShown }
+  private var outsideClickMonitor: Any?
+  private var localClickMonitor: Any?
   private var cancellables: Set<AnyCancellable> = []
+
+  deinit {
+    if let outsideClickMonitor { NSEvent.removeMonitor(outsideClickMonitor) }
+    if let localClickMonitor { NSEvent.removeMonitor(localClickMonitor) }
+  }
 
   init(
     store: AppStore, keys: KeybindingStore, commands: ApplicationCommands,
@@ -27,6 +34,17 @@ final class StatusItemController: NSObject, ObservableObject {
     self.popover = popover
     super.init()
 
+    let mouseDown: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+    outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: mouseDown) { [weak self] _ in
+      MainActor.assumeIsolated { self?.closePopoverForOutsideClick() }
+    }
+    localClickMonitor = NSEvent.addLocalMonitorForEvents(matching: mouseDown) { [weak self] event in
+      MainActor.assumeIsolated {
+        guard let self else { return }
+        self.closePopoverForOutsideClick(in: event.window)
+      }
+      return event
+    }
     popover.behavior = .transient
     popover.contentViewController = NSHostingController(
       rootView: DashboardView(store: store, keys: keys, commands: commands,
@@ -72,6 +90,19 @@ final class StatusItemController: NSObject, ObservableObject {
         popover.contentViewController?.view.window?.makeKey()
       }
     }
+  }
+
+  func closePopoverForOutsideClick(in window: NSWindow? = nil) {
+    guard popover.isShown else { return }
+    if let window {
+      if window === statusItem.button?.window { return }
+      var ancestor: NSWindow? = window
+      while let current = ancestor {
+        if current === popover.contentViewController?.view.window { return }
+        ancestor = current.sheetParent ?? current.parent
+      }
+    }
+    popover.close()
   }
 
   private func showContextMenu(from button: NSStatusBarButton) {

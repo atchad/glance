@@ -68,6 +68,35 @@ enum PanelWindowChecks {
       item.button!.performClick(nil)
       pump()
       try check(status.isPopoverShown, "The menu-bar popover must reopen.")
+      status.closePopoverForOutsideClick(in: item.button!.window)
+      try check(status.isPopoverShown, "Status-item clicks must remain controlled by the toggle action.")
+      let menuWindow = menuPopover.contentViewController!.view.window!
+      status.closePopoverForOutsideClick(in: menuWindow)
+      try check(status.isPopoverShown, "Clicks inside the menu must keep it open.")
+      let detailWindow = NSPanel(contentRect: NSRect(x: 100, y: 100, width: 180, height: 120),
+        styleMask: [.borderless], backing: .buffered, defer: false)
+      detailWindow.isReleasedWhenClosed = false
+      menuWindow.addChildWindow(detailWindow, ordered: .above)
+      status.closePopoverForOutsideClick(in: detailWindow)
+      try check(status.isPopoverShown, "Clicks inside child details must keep the menu open.")
+      menuWindow.removeChildWindow(detailWindow)
+      detailWindow.orderOut(nil)
+      status.closePopoverForOutsideClick()
+      pump()
+      try check(!status.isPopoverShown, "A click from another application must close the menu.")
+      for type: NSEvent.EventType in [.leftMouseDown, .rightMouseDown, .otherMouseDown] {
+        item.button!.performClick(nil)
+        pump()
+        let event = NSEvent.mouseEvent(with: type, location: .zero, modifierFlags: [],
+          timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: detailWindow.windowNumber,
+          context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+        NSApp.sendEvent(event)
+        pump()
+        try check(!status.isPopoverShown,
+          "An outside \(type) must close the menu even when focus does not change.")
+      }
+      item.button!.performClick(nil)
+      pump()
       commands.perform(.showPanel)
       pump()
       try check(panel.isVisible && !status.isPopoverShown,
